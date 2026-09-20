@@ -54,10 +54,21 @@ fun TimelineScreen(
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
+    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
 
     Column(modifier = modifier.fillMaxSize()) {
-        // Material 3 App Header with Logo
+        // Material 3 App Header with Logo & Updater Action
         Material3GalleryHeader(
+            updateAvailable = updateInfo != null,
+            isCheckingUpdate = isCheckingUpdate,
+            onUpdateClick = {
+                if (updateInfo != null) {
+                    viewModel.openUpdateDialog()
+                } else {
+                    viewModel.checkForUpdates(silent = false)
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)

@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import com.gallery.android.ui.components.UpdateNotificationDialog
 import com.gallery.android.ui.screens.AlbumsScreen
 import com.gallery.android.ui.screens.AiCategoriesScreen
 import com.gallery.android.ui.screens.MediaViewerScreen
@@ -56,11 +57,26 @@ class MainActivity : ComponentActivity() {
             GalleryTheme {
                 val selectedIndex by viewModel.selectedItemIndex.collectAsState()
                 val filteredMedia by viewModel.filteredMedia.collectAsState()
+                val showUpdateDialog by viewModel.showUpdateDialog.collectAsState()
+                val updateInfo by viewModel.updateInfo.collectAsState()
+                val downloadProgress by viewModel.downloadProgress.collectAsState()
+                val isDownloading by viewModel.isDownloading.collectAsState()
                 var currentTab by remember { mutableStateOf(GalleryTab.PHOTOS) }
+
+                // Check if launched from update notification
+                LaunchedEffect(intent) {
+                    if (intent.getBooleanExtra("EXTRA_OPEN_UPDATE", false)) {
+                        viewModel.openUpdateDialog()
+                    }
+                }
 
                 // Permission launcher
                 val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
+                    arrayOf(
+                        Manifest.permission.READ_MEDIA_IMAGES,
+                        Manifest.permission.READ_MEDIA_VIDEO,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    )
                 } else {
                     arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
                 }
@@ -68,8 +84,13 @@ class MainActivity : ComponentActivity() {
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { permissions ->
-                    val granted = permissions.values.all { it }
-                    if (granted) {
+                    val mediaGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        (permissions[Manifest.permission.READ_MEDIA_IMAGES] == true ||
+                         permissions[Manifest.permission.READ_MEDIA_VIDEO] == true)
+                    } else {
+                        permissions[Manifest.permission.READ_EXTERNAL_STORAGE] == true
+                    }
+                    if (mediaGranted) {
                         viewModel.loadMedia()
                     }
                 }
@@ -142,6 +163,18 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+
+                // In-App Update Notification Dialog
+                if (showUpdateDialog && updateInfo != null) {
+                    UpdateNotificationDialog(
+                        updateInfo = updateInfo!!,
+                        downloadProgress = downloadProgress,
+                        isDownloading = isDownloading,
+                        onStartDownload = { viewModel.startDownloadUpdate() },
+                        onInstall = { viewModel.installDownloadedUpdate() },
+                        onDismiss = { viewModel.dismissUpdateDialog() }
+                    )
                 }
             }
         }

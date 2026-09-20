@@ -24,12 +24,43 @@ import java.util.Date
 import java.util.Locale
 
 import com.gallery.core.model.Album
+import com.gallery.core.updater.UpdateChecker
+import com.gallery.core.updater.UpdateInfo
+import com.gallery.android.updater.AndroidAppUpdater
+import com.gallery.android.updater.DownloadProgress
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.map
+import java.io.File
 
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
 
+    companion object {
+        const val APP_VERSION = "1.0.0"
+    }
+
     private val _mediaItems = MutableStateFlow<List<MediaItem>>(emptyList())
     val mediaItems: StateFlow<List<MediaItem>> = _mediaItems.asStateFlow()
+
+    // Updater States
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _showUpdateDialog = MutableStateFlow(false)
+    val showUpdateDialog: StateFlow<Boolean> = _showUpdateDialog.asStateFlow()
+
+    private val _downloadProgress = MutableStateFlow<DownloadProgress?>(null)
+    val downloadProgress: StateFlow<DownloadProgress?> = _downloadProgress.asStateFlow()
+
+    private val _isDownloading = MutableStateFlow(false)
+    val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
+
+    private val _downloadedApkFile = MutableStateFlow<File?>(null)
+    val downloadedApkFile: StateFlow<File?> = _downloadedApkFile.asStateFlow()
+
+    private var downloadJob: Job? = null
 
     private val _selectedCategory = MutableStateFlow<AiCategory?>(null)
     val selectedCategory: StateFlow<AiCategory?> = _selectedCategory.asStateFlow()
@@ -181,5 +212,89 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun closeViewer() {
         _selectedItemIndex.value = null
+    }
+
+    init {
+        // Automatically check for updates silently in background on launch
+        checkForUpdates(silent = true)
+    }
+
+    /**
+     * Checks for updates against GitHub Releases.
+     */
+    fun checkForUpdates(silent: Boolean = false) {
+        if (_isCheckingUpdate.value) return
+        _isCheckingUpdate.value = true
+
+        viewModelScope.launch {
+            val result = UpdateChecker.checkForUpdate(APP_VERSION)
+            _isCheckingUpdate.value = false
+
+            result.onSuccess { info ->
+                if (info != null) {
+                    _updateInfo.value = info
+                    _showUpdateDialog.value = true
+                    // Post system notification so user knows even if outside app
+                    val context = getApplication<Application>()
+                    AndroidAppUpdater.showUpdateNotification(context, info)
+                } else if (!silent) {
+                    // Manual check: already up to date
+                    _updateInfo.value = null
+                }
+            }.onFailure {
+                // Silently ignore if offline, without disturbing user
+            }
+        }
+    }
+
+    fun openUpdateDialog() {
+        _showUpdateDialog.value = true
+    }
+
+    fun dismissUpdateDialog() {
+        _showUpdateDialog.value = false
+    }
+
+    /**
+     * Starts downloading the APK update with progress reporting.
+     */
+    fun startDownloadUpdate() {
+        val info = _updateInfo.value ?: return
+        val apkAsset = info.apkAsset ?: return
+        if (_isDownloading.value) return
+
+        _isDownloading.value = true
+        val context = getApplication<Application>()
+
+        downloadJob?.cancel()
+        downloadJob = viewModelScope.launch {
+            AndroidAppUpdater.downloadApk(
+                context = context,
+                downloadUrl = apkAsset.downloadUrl,
+                versionName = info.versionName
+            ).collect { progress ->
+                _downloadProgress.value = progress
+                if (progress.isComplete && progress.file != null) {
+                    _isDownloading.value = false
+                    _downloadedApkFile.value = progress.file
+                    AndroidAppUpdater.showDownloadCompleteNotification(
+                        context,
+                        progress.file,
+                        info.versionName
+                    )
+                } else if (progress.error != null) {
+                    _isDownloading.value = false
+                }
+            }
+        }
+    }
+
+    /**
+     * Launches Android package installer for the downloaded APK.
+     */
+    fun installDownloadedUpdate() {
+        val file = _downloadedApkFile.value ?: return
+        val context = getApplication<Application>()
+        AndroidAppUpdater.installApk(context, file)
     }
 }

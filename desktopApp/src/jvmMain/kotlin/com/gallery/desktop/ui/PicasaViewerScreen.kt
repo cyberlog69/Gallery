@@ -68,6 +68,12 @@ fun PicasaViewerScreen(
     val isSlideshowRunning by viewModel.isSlideshowRunning.collectAsState()
     val showExif by viewModel.showExif.collectAsState()
     val showFilmstrip by viewModel.showFilmstrip.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
+    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val showUpdatePill by viewModel.showUpdatePill.collectAsState()
+    val showUpdateModal by viewModel.showUpdateModal.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val isDownloading by viewModel.isDownloading.collectAsState()
 
     val currentItem = viewModel.currentItem
 
@@ -224,6 +230,25 @@ fun PicasaViewerScreen(
                 }
             }
 
+            // Top Floating Update Notification Pill
+            AnimatedVisibility(
+                visible = showUpdatePill && updateInfo != null,
+                enter = slideInVertically { -it } + fadeIn(),
+                exit = slideOutVertically { -it } + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+            ) {
+                if (updateInfo != null) {
+                    UpdateNotificationPill(
+                        updateInfo = updateInfo!!,
+                        onOpenDetails = { viewModel.openUpdateModal() },
+                        onDownload = { viewModel.startDownloadUpdate() },
+                        onDismiss = { viewModel.dismissUpdatePill() }
+                    )
+                }
+            }
+
             // EXIF Info Panel
             if (showExif && currentItem != null) {
                 ExifPanel(
@@ -261,6 +286,15 @@ fun PicasaViewerScreen(
                     onToggleExif = { viewModel.toggleExif() },
                     onToggleFilmstrip = { viewModel.toggleFilmstrip() },
                     onOpenFolder = openFolderDialog,
+                    updateAvailable = updateInfo != null,
+                    isCheckingUpdate = isCheckingUpdate,
+                    onCheckUpdate = {
+                        if (updateInfo != null) {
+                            viewModel.openUpdateModal()
+                        } else {
+                            viewModel.checkForUpdates(silent = false)
+                        }
+                    },
                     modifier = Modifier.padding(bottom = if (showFilmstrip) 12.dp else 24.dp)
                 )
 
@@ -276,6 +310,18 @@ fun PicasaViewerScreen(
                         onSelectIndex = { viewModel.selectIndex(it) }
                     )
                 }
+            }
+
+            // Desktop Update Modal Dialog
+            if (showUpdateModal && updateInfo != null) {
+                UpdateModalDialog(
+                    updateInfo = updateInfo!!,
+                    downloadProgress = downloadProgress,
+                    isDownloading = isDownloading,
+                    onStartDownload = { viewModel.startDownloadUpdate() },
+                    onOpenInBrowser = { viewModel.openReleaseInBrowser() },
+                    onDismiss = { viewModel.dismissUpdateModal() }
+                )
             }
         }
     }

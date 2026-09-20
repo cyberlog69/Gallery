@@ -24,8 +24,10 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RotateLeft
 import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
@@ -70,6 +72,9 @@ fun FloatingControlBar(
     onToggleExif: () -> Unit,
     onToggleFilmstrip: () -> Unit,
     onOpenFolder: () -> Unit,
+    updateAvailable: Boolean = false,
+    isCheckingUpdate: Boolean = false,
+    onCheckUpdate: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -184,6 +189,17 @@ fun FloatingControlBar(
                 contentDescription = "Open Folder",
                 onClick = onOpenFolder
             )
+
+            // In-App Updater Button
+            if (onCheckUpdate != null) {
+                PicasaDivider()
+                PicasaIconButton(
+                    icon = if (updateAvailable) Icons.Default.SystemUpdate else Icons.Default.Refresh,
+                    contentDescription = if (updateAvailable) "Update Available" else "Check for Updates",
+                    tint = if (updateAvailable) Color(0xFF389BF2) else PicasaTextSecondary,
+                    onClick = onCheckUpdate
+                )
+            }
 
             // AI Tag Pill if available
             if (aiResult != null && aiResult.category != com.gallery.core.model.AiCategory.UNCATEGORIZED) {

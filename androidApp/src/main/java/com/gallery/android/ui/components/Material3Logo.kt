@@ -1,10 +1,19 @@
 package com.gallery.android.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -99,19 +108,54 @@ fun Material3GalleryLogo(
 
 @Composable
 fun Material3GalleryHeader(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    updateAvailable: Boolean = false,
+    isCheckingUpdate: Boolean = false,
+    onUpdateClick: (() -> Unit)? = null
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
         modifier = modifier
     ) {
-        Material3GalleryLogo(size = 32.dp)
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = "Gallery",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Material3GalleryLogo(size = 32.dp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = "Gallery",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        if (onUpdateClick != null) {
+            IconButton(onClick = onUpdateClick) {
+                BadgedBox(
+                    badge = {
+                        if (updateAvailable) {
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                ) {
+                    if (isCheckingUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (updateAvailable) Icons.Default.SystemUpdate else Icons.Default.Refresh,
+                            contentDescription = if (updateAvailable) "Update Available" else "Check for Updates",
+                            tint = if (updateAvailable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
     }
 }
+

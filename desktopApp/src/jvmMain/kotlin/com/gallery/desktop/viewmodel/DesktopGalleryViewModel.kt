@@ -17,13 +17,42 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.gallery.core.updater.UpdateChecker
+import com.gallery.core.updater.UpdateInfo
+import com.gallery.desktop.updater.DesktopAppUpdater
+import com.gallery.desktop.updater.DesktopDownloadProgress
 import java.io.File
 
 class DesktopGalleryViewModel(
     private val scope: CoroutineScope
 ) {
+    companion object {
+        const val APP_VERSION = "1.0.0"
+    }
+
     private val _mediaItems = MutableStateFlow<List<MediaItem>>(emptyList())
     val mediaItems: StateFlow<List<MediaItem>> = _mediaItems.asStateFlow()
+
+    // Updater states
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _showUpdatePill = MutableStateFlow(false)
+    val showUpdatePill: StateFlow<Boolean> = _showUpdatePill.asStateFlow()
+
+    private val _showUpdateModal = MutableStateFlow(false)
+    val showUpdateModal: StateFlow<Boolean> = _showUpdateModal.asStateFlow()
+
+    private val _downloadProgress = MutableStateFlow<DesktopDownloadProgress?>(null)
+    val downloadProgress: StateFlow<DesktopDownloadProgress?> = _downloadProgress.asStateFlow()
+
+    private val _isDownloading = MutableStateFlow(false)
+    val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
+
+    private var downloadJob: Job? = null
 
     private val _currentIndex = MutableStateFlow(0)
     val currentIndex: StateFlow<Int> = _currentIndex.asStateFlow()
@@ -227,6 +256,72 @@ class DesktopGalleryViewModel(
             selectIndex(_currentIndex.value.coerceIn(0, list.size - 1))
         } else {
             _currentBitmap.value = null
+        }
+    }
+
+    init {
+        checkForUpdates(silent = true)
+    }
+
+    /**
+     * Checks for updates against GitHub Releases.
+     */
+    fun checkForUpdates(silent: Boolean = false) {
+        if (_isCheckingUpdate.value) return
+        _isCheckingUpdate.value = true
+
+        scope.launch {
+            val result = UpdateChecker.checkForUpdate(APP_VERSION)
+            _isCheckingUpdate.value = false
+
+            result.onSuccess { info ->
+                if (info != null) {
+                    _updateInfo.value = info
+                    _showUpdatePill.value = true
+                    DesktopAppUpdater.showWindowsNotification(info)
+                } else if (!silent) {
+                    _updateInfo.value = null
+                }
+            }.onFailure {
+                // Silently ignore if offline
+            }
+        }
+    }
+
+    fun openUpdateModal() {
+        _showUpdateModal.value = true
+    }
+
+    fun dismissUpdateModal() {
+        _showUpdateModal.value = false
+    }
+
+    fun dismissUpdatePill() {
+        _showUpdatePill.value = false
+    }
+
+    fun openReleaseInBrowser() {
+        val url = _updateInfo.value?.releaseUrl ?: "https://github.com/cyberlog69/Gallery/releases"
+        DesktopAppUpdater.openInBrowser(url)
+    }
+
+    fun startDownloadUpdate() {
+        val info = _updateInfo.value ?: return
+        val asset = info.desktopAsset ?: return
+        if (_isDownloading.value) return
+
+        _isDownloading.value = true
+        downloadJob?.cancel()
+        downloadJob = scope.launch {
+            DesktopAppUpdater.downloadAsset(
+                downloadUrl = asset.downloadUrl,
+                fileName = asset.name
+            ).collect { progress ->
+                _downloadProgress.value = progress
+                if (progress.isComplete || progress.error != null) {
+                    _isDownloading.value = false
+                }
+            }
         }
     }
 }
