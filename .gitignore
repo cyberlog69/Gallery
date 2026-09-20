@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+
+# Local configuration
+local.properties
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Caches
+.gallery_cache/

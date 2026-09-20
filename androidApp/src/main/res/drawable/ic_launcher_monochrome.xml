@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Monochrome silhouette for Android 13+ Material You Themed Icons -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,24 C41.5,24 31,34.5 31,47 C31,48.5 31.2,50 31.5,51.4 L49,51.4 C50.5,47.2 54,44 58.2,42.8 L58.2,25.2 C56.8,24.4 55.4,24 54,24 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M84,54 C84,41.5 73.5,31 61,31 C59.5,31 58,31.2 56.6,31.5 L56.6,49 C60.8,50.5 64,54 65.2,58.2 L82.8,58.2 C83.6,56.8 84,55.4 84,54 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,84 C66.5,84 77,73.5 77,61 C77,59.5 76.8,58 76.5,56.6 L59,56.6 C57.5,60.8 54,64 49.8,65.2 L49.8,82.8 C51.2,83.6 52.6,84 54,84 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M24,54 C24,66.5 34.5,77 47,77 C48.5,77 50,76.8 51.4,76.5 L51.4,59 C47.2,57.5 44,54 42.8,49.8 L25.2,49.8 C24.4,51.2 24,52.6 24,54 Z" />
+    <!-- Center aperture ring -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,54m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
+</vector>

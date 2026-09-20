@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Top Blade (Material 3 Primary) -->
+    <path
+        android:fillColor="#0061A4"
+        android:pathData="M24,10 C18.5,10 14,14.5 14,20 C14,20.8 14.1,21.6 14.3,22.3 L22,22.3 C22.7,20.4 24.4,19 26.5,18.4 L26.5,10.6 C25.7,10.2 24.9,10 24,10 Z" />
+    <!-- Right Blade (Material 3 Secondary/Teal) -->
+    <path
+        android:fillColor="#006876"
+        android:pathData="M38,24 C38,18.5 33.5,14 28,14 C27.2,14 26.4,14.1 25.7,14.3 L25.7,22 C27.6,22.7 29,24.4 29.6,26.5 L37.4,26.5 C37.8,25.7 38,24.9 38,24 Z" />
+    <!-- Bottom Blade (Material 3 Tertiary Coral) -->
+    <path
+        android:fillColor="#984061"
+        android:pathData="M24,38 C29.5,38 34,33.5 34,28 C34,27.2 33.9,26.4 33.7,25.7 L26,25.7 C25.3,27.6 23.6,29 21.5,29.6 L21.5,37.4 C22.3,37.8 23.1,38 24,38 Z" />
+    <!-- Left Blade (Material 3 Amber Tonal) -->
+    <path
+        android:fillColor="#705D00"
+        android:pathData="M10,24 C10,29.5 14.5,34 20,34 C20.8,34 21.6,33.9 22.3,33.7 L22.3,26 C20.4,25.3 19,23.6 18.4,21.5 L10.6,21.5 C10.2,22.3 10,23.1 10,24 Z" />
+    <!-- Center Lens Core -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,24m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
+    <path
+        android:fillColor="#001D36"
+        android:pathData="M24,24m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0" />
+</vector>
