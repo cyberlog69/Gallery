@@ -27,7 +27,7 @@ class DesktopGalleryViewModel(
     private val scope: CoroutineScope
 ) {
     companion object {
-        const val APP_VERSION = "1.0.0"
+        const val APP_VERSION = "1.0.1"
     }
 
     private val _mediaItems = MutableStateFlow<List<MediaItem>>(emptyList())

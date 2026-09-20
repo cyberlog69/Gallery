@@ -14,7 +14,7 @@ if %ERRORLEVEL% equ 0 (
     echo.
     echo ==========================================================
     echo  MSI Installer generated successfully!
-    echo  Location: desktopApp\build\compose\binaries\main\msi\PicasaGalleryViewer-1.0.0.msi
+    echo  Location: desktopApp\build\compose\binaries\main\msi\PicasaGalleryViewer-1.0.1.msi
     echo ==========================================================
 ) else (
     echo.
