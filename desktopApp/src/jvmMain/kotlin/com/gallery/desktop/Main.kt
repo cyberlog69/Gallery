@@ -32,7 +32,8 @@ fun main(args: Array<String>) = application {
             if (target.exists()) {
                 val folder = if (target.isDirectory) target else target.parentFile
                 if (folder != null) {
-                    viewModel.loadFolder(folder)
+                    val targetFile = if (target.isFile) target else null
+                    viewModel.loadFolder(folder, targetFile)
                 }
             }
         } else {

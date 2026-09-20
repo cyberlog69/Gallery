@@ -52,6 +52,9 @@ class DesktopGalleryViewModel(
     private val _isDownloading = MutableStateFlow(false)
     val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
 
+    private val _showSetDefaultDialog = MutableStateFlow(false)
+    val showSetDefaultDialog: StateFlow<Boolean> = _showSetDefaultDialog.asStateFlow()
+
     private var downloadJob: Job? = null
 
     private val _currentIndex = MutableStateFlow(0)
@@ -93,14 +96,18 @@ class DesktopGalleryViewModel(
     val currentItem: MediaItem?
         get() = _mediaItems.value.getOrNull(_currentIndex.value)
 
-    fun loadFolder(folder: File) {
+    fun loadFolder(folder: File, targetFile: File? = null) {
         _currentFolder.value = folder
         scope.launch {
             val items = mutableListOf<MediaItem>()
+            var targetSelected = false
             DesktopFileScanner.scanDirectory(folder, recursive = false).collect { item ->
                 items.add(item)
                 _mediaItems.value = items.toList()
-                if (items.size == 1) {
+                if (targetFile != null && !targetSelected && item.path.equals(targetFile.absolutePath, ignoreCase = true)) {
+                    selectIndex(items.size - 1)
+                    targetSelected = true
+                } else if (items.size == 1 && targetFile == null) {
                     selectIndex(0)
                 }
             }
@@ -323,5 +330,13 @@ class DesktopGalleryViewModel(
                 }
             }
         }
+    }
+
+    fun openSetDefaultDialog() {
+        _showSetDefaultDialog.value = true
+    }
+
+    fun dismissSetDefaultDialog() {
+        _showSetDefaultDialog.value = false
     }
 }

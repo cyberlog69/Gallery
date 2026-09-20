@@ -8,6 +8,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,10 +24,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -74,6 +77,7 @@ fun PicasaViewerScreen(
     val showUpdateModal by viewModel.showUpdateModal.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val isDownloading by viewModel.isDownloading.collectAsState()
+    val showSetDefaultDialog by viewModel.showSetDefaultDialog.collectAsState()
 
     val currentItem = viewModel.currentItem
 
@@ -130,14 +134,28 @@ fun PicasaViewerScreen(
                         color = PicasaTextSecondary
                     )
                     Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = openFolderDialog,
-                        colors = ButtonDefaults.buttonColors(containerColor = PicasaAccent),
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Open Pictures Folder", fontWeight = FontWeight.SemiBold)
+                        Button(
+                            onClick = openFolderDialog,
+                            colors = ButtonDefaults.buttonColors(containerColor = PicasaAccent),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Open Pictures Folder", fontWeight = FontWeight.SemiBold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.openSetDefaultDialog() },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Set as Default Viewer", color = Color.White, fontWeight = FontWeight.Medium)
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
@@ -286,6 +304,7 @@ fun PicasaViewerScreen(
                     onToggleExif = { viewModel.toggleExif() },
                     onToggleFilmstrip = { viewModel.toggleFilmstrip() },
                     onOpenFolder = openFolderDialog,
+                    onSetDefaultViewer = { viewModel.openSetDefaultDialog() },
                     updateAvailable = updateInfo != null,
                     isCheckingUpdate = isCheckingUpdate,
                     onCheckUpdate = {
@@ -323,6 +342,14 @@ fun PicasaViewerScreen(
                     onDismiss = { viewModel.dismissUpdateModal() }
                 )
             }
+        }
+
+        // Set as Default Photo Viewer Dialog
+        if (showSetDefaultDialog) {
+            SetDefaultViewerDialog(
+                sampleFile = currentItem?.path?.let { File(it) },
+                onDismiss = { viewModel.dismissSetDefaultDialog() }
+            )
         }
     }
 }

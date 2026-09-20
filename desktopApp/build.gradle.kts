@@ -37,6 +37,11 @@ compose.desktop {
             windows {
                 menuGroup = "Gallery"
                 upgradeUuid = "6d7e263c-3965-4f4d-8b09-1a4176c12345"
+                shortcut = true
+                menu = true
+                dirChooser = true
+                perUserInstall = false
+                iconFile.set(project.file("src/jvmMain/resources/icon.ico"))
             }
         }
     }

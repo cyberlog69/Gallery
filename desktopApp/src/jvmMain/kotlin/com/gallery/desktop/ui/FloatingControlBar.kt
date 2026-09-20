@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RotateLeft
 import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.ZoomIn
@@ -72,6 +73,7 @@ fun FloatingControlBar(
     onToggleExif: () -> Unit,
     onToggleFilmstrip: () -> Unit,
     onOpenFolder: () -> Unit,
+    onSetDefaultViewer: (() -> Unit)? = null,
     updateAvailable: Boolean = false,
     isCheckingUpdate: Boolean = false,
     onCheckUpdate: (() -> Unit)? = null,
@@ -189,6 +191,16 @@ fun FloatingControlBar(
                 contentDescription = "Open Folder",
                 onClick = onOpenFolder
             )
+
+            // Set as Default Viewer Button
+            if (onSetDefaultViewer != null) {
+                PicasaIconButton(
+                    icon = Icons.Default.Settings,
+                    contentDescription = "Set as Default Photo Viewer",
+                    tint = PicasaTextSecondary,
+                    onClick = onSetDefaultViewer
+                )
+            }
 
             // In-App Updater Button
             if (onCheckUpdate != null) {
