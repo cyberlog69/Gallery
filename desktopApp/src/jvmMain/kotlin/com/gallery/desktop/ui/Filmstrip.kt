@@ -1,5 +1,6 @@
 package com.gallery.desktop.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +27,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -34,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gallery.core.decoder.DesktopImageDecoder
 import com.gallery.core.model.MediaItem
+import com.gallery.desktop.ui.theme.AeroAccent
+import com.gallery.desktop.ui.theme.AeroFilmstripGradient
 import com.gallery.desktop.ui.theme.PicasaAccent
 import com.gallery.desktop.ui.theme.PicasaBorder
 import com.gallery.desktop.ui.theme.PicasaSurfaceTranslucent
@@ -44,6 +49,7 @@ fun Filmstrip(
     mediaItems: List<MediaItem>,
     currentIndex: Int,
     onSelectIndex: (Int) -> Unit,
+    isAeroTheme: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -59,9 +65,25 @@ fun Filmstrip(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(84.dp)
-            .background(PicasaSurfaceTranslucent)
-            .border(1.dp, PicasaBorder)
+            .height(86.dp)
+            .then(
+                if (isAeroTheme) {
+                    Modifier
+                        .background(AeroFilmstripGradient)
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                Brush.horizontalGradient(
+                                    listOf(Color(0x15FFFFFF), Color(0x55FFFFFF), Color(0x15FFFFFF))
+                                )
+                            )
+                        )
+                } else {
+                    Modifier
+                        .background(PicasaSurfaceTranslucent)
+                        .border(1.dp, PicasaBorder)
+                }
+            )
             .padding(vertical = 8.dp)
     ) {
         LazyRow(
@@ -75,6 +97,7 @@ fun Filmstrip(
                 FilmstripItem(
                     item = item,
                     isSelected = isSelected,
+                    isAeroTheme = isAeroTheme,
                     onClick = { onSelectIndex(index) }
                 )
             }
@@ -86,6 +109,7 @@ fun Filmstrip(
 fun FilmstripItem(
     item: MediaItem,
     isSelected: Boolean,
+    isAeroTheme: Boolean = true,
     onClick: () -> Unit
 ) {
     val thumbnailBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = item.path) {
@@ -96,16 +120,28 @@ fun FilmstripItem(
         }
     }
 
+    val itemShape = RoundedCornerShape(8.dp)
+
     Box(
         modifier = Modifier
             .size(68.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .then(
+                if (isAeroTheme && isSelected) {
+                    Modifier.shadow(elevation = 10.dp, shape = itemShape, spotColor = Color(0xDD00C3FF))
+                } else Modifier
+            )
+            .clip(itemShape)
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) PicasaAccent else Color(0x33FFFFFF),
-                shape = RoundedCornerShape(6.dp)
+                color = when {
+                    isSelected && isAeroTheme -> AeroAccent
+                    isSelected -> PicasaAccent
+                    isAeroTheme -> Color(0x38FFFFFF)
+                    else -> Color(0x33FFFFFF)
+                },
+                shape = itemShape
             )
-            .background(Color(0xFF22242B))
+            .background(if (isAeroTheme) Color(0xFF141A24) else Color(0xFF22242B))
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -118,6 +154,21 @@ fun FilmstripItem(
             )
         } else {
             Box(modifier = Modifier.size(68.dp).background(Color(0xFF262830)))
+        }
+
+        // Aero glossy glass highlight on selected item
+        if (isAeroTheme && isSelected) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color(0x33FFFFFF),
+                            0.5f to Color(0x00FFFFFF),
+                            1.0f to Color(0x1500C3FF)
+                        )
+                    )
+            )
         }
 
         if (item.isVideo) {

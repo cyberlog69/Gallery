@@ -5,8 +5,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,7 +39,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -46,6 +50,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gallery.desktop.ui.theme.AeroAccent
+import com.gallery.desktop.ui.theme.AeroBackgroundGradient
+import com.gallery.desktop.ui.theme.AeroBorderGradient
+import com.gallery.desktop.ui.theme.AeroHeaderCapsuleGradient
+import com.gallery.desktop.ui.theme.AeroPillGradient
 import com.gallery.desktop.ui.theme.PicasaAccent
 import com.gallery.desktop.ui.theme.PicasaBackground
 import com.gallery.desktop.ui.theme.PicasaTextPrimary
@@ -78,6 +87,7 @@ fun PicasaViewerScreen(
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val isDownloading by viewModel.isDownloading.collectAsState()
     val showSetDefaultDialog by viewModel.showSetDefaultDialog.collectAsState()
+    val isAeroTheme by viewModel.isAeroTheme.collectAsState()
 
     val currentItem = viewModel.currentItem
 
@@ -99,7 +109,7 @@ fun PicasaViewerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(PicasaBackground)
+            .background(if (isAeroTheme) AeroBackgroundGradient else SolidColor(PicasaBackground))
             .onPointerEvent(PointerEventType.Scroll) { event ->
                 val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                 if (delta < 0) {
@@ -115,9 +125,22 @@ fun PicasaViewerScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
+                val heroShape = RoundedCornerShape(24.dp)
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(32.dp)
+                    modifier = Modifier
+                        .then(
+                            if (isAeroTheme) {
+                                Modifier
+                                    .shadow(elevation = 24.dp, shape = heroShape, spotColor = Color(0x6600C3FF))
+                                    .clip(heroShape)
+                                    .background(AeroPillGradient)
+                                    .border(BorderStroke(1.2.dp, AeroBorderGradient), heroShape)
+                                    .padding(36.dp)
+                            } else {
+                                Modifier.padding(32.dp)
+                            }
+                        )
                 ) {
                     PicasaApertureLogo(size = 84.dp)
                     Spacer(modifier = Modifier.height(20.dp))
@@ -125,7 +148,7 @@ fun PicasaViewerScreen(
                         text = "Picasa Photo Viewer",
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
-                        color = PicasaTextPrimary
+                        color = Color.White
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -220,30 +243,48 @@ fun PicasaViewerScreen(
                     .padding(horizontal = 24.dp, vertical = 16.dp)
                     .align(Alignment.TopCenter)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .then(
+                            if (isAeroTheme) {
+                                val capsuleShape = RoundedCornerShape(20.dp)
+                                Modifier
+                                    .shadow(elevation = 12.dp, shape = capsuleShape, spotColor = Color(0x5500C3FF))
+                                    .clip(capsuleShape)
+                                    .background(AeroHeaderCapsuleGradient)
+                                    .border(BorderStroke(1.dp, AeroBorderGradient), capsuleShape)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            } else {
+                                Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            }
+                        )
                 ) {
-                    PicasaApertureLogo(size = 22.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = currentItem?.displayName ?: "",
-                        color = PicasaTextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "${currentIndex + 1} of ${mediaItems.size}",
-                        color = PicasaTextSecondary,
-                        fontSize = 13.sp
-                    )
-                    if (currentItem != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PicasaApertureLogo(size = 22.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = currentItem?.displayName ?: "",
+                            color = if (isAeroTheme) Color.White else PicasaTextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "(${currentItem.formattedSize})",
-                            color = Color(0x66FFFFFF),
-                            fontSize = 12.sp
+                            text = "${currentIndex + 1} of ${mediaItems.size}",
+                            color = if (isAeroTheme) AeroAccent else PicasaTextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = if (isAeroTheme) FontWeight.Medium else FontWeight.Normal
                         )
+                        if (currentItem != null) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "(${currentItem.formattedSize})",
+                                color = if (isAeroTheme) Color(0xAAFFFFFF) else Color(0x66FFFFFF),
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
@@ -272,6 +313,7 @@ fun PicasaViewerScreen(
                 ExifPanel(
                     item = currentItem,
                     onClose = { viewModel.toggleExif() },
+                    isAeroTheme = isAeroTheme,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 60.dp, end = 24.dp)
@@ -314,6 +356,8 @@ fun PicasaViewerScreen(
                             viewModel.checkForUpdates(silent = false)
                         }
                     },
+                    isAeroTheme = isAeroTheme,
+                    onToggleAeroTheme = { viewModel.toggleAeroTheme() },
                     modifier = Modifier.padding(bottom = if (showFilmstrip) 12.dp else 24.dp)
                 )
 
@@ -326,6 +370,7 @@ fun PicasaViewerScreen(
                     Filmstrip(
                         mediaItems = mediaItems,
                         currentIndex = currentIndex,
+                        isAeroTheme = isAeroTheme,
                         onSelectIndex = { viewModel.selectIndex(it) }
                     )
                 }

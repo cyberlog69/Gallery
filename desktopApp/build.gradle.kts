@@ -30,7 +30,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "PicasaGalleryViewer"
-            packageVersion = "1.0.1"
+            packageVersion = "1.0.2"
             description = "Picasa-style Ultra-fast Offline Media Viewer"
             copyright = "© 2026 Gallery Team"
 

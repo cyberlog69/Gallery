@@ -83,6 +83,10 @@ fun main(args: Array<String>) = application {
                         viewModel.toggleExif()
                         true
                     }
+                    Key.T -> {
+                        viewModel.toggleAeroTheme()
+                        true
+                    }
                     Key.Delete -> {
                         viewModel.deleteCurrent()
                         true

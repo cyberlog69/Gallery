@@ -27,7 +27,7 @@ class DesktopGalleryViewModel(
     private val scope: CoroutineScope
 ) {
     companion object {
-        const val APP_VERSION = "1.0.1"
+        const val APP_VERSION = "1.0.2"
     }
 
     private val _mediaItems = MutableStateFlow<List<MediaItem>>(emptyList())
@@ -54,6 +54,9 @@ class DesktopGalleryViewModel(
 
     private val _showSetDefaultDialog = MutableStateFlow(false)
     val showSetDefaultDialog: StateFlow<Boolean> = _showSetDefaultDialog.asStateFlow()
+
+    private val _isAeroTheme = MutableStateFlow(true)
+    val isAeroTheme: StateFlow<Boolean> = _isAeroTheme.asStateFlow()
 
     private var downloadJob: Job? = null
 
@@ -338,5 +341,9 @@ class DesktopGalleryViewModel(
 
     fun dismissSetDefaultDialog() {
         _showSetDefaultDialog.value = false
+    }
+
+    fun toggleAeroTheme() {
+        _isAeroTheme.value = !_isAeroTheme.value
     }
 }
