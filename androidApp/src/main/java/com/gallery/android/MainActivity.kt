@@ -112,7 +112,8 @@ class MainActivity : ComponentActivity() {
                     MediaViewerScreen(
                         items = filteredMedia,
                         initialIndex = selectedIndex!!,
-                        onBack = { viewModel.closeViewer() }
+                        onBack = { viewModel.closeViewer() },
+                        onMediaUpdated = { viewModel.loadMedia() }
                     )
                 } else {
                     // Standard Gallery Mode with Material 3 Navigation Bar

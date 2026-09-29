@@ -22,13 +22,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +72,7 @@ fun MediaViewerScreen(
     items: List<MediaItem>,
     initialIndex: Int,
     onBack: () -> Unit,
+    onMediaUpdated: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (items.isEmpty()) {
@@ -83,7 +87,20 @@ fun MediaViewerScreen(
 
     var showChrome by remember { mutableStateOf(true) }
     var showExifSheet by remember { mutableStateOf(false) }
+    var showEditor by remember { mutableStateOf(false) }
     val currentItem = items.getOrNull(pagerState.currentPage)
+
+    if (showEditor && currentItem != null && !currentItem.isVideo) {
+        PhotoEditorScreen(
+            item = currentItem,
+            onClose = { showEditor = false },
+            onSaved = {
+                showEditor = false
+                onMediaUpdated?.invoke()
+            }
+        )
+        return
+    }
 
     Box(
         modifier = modifier
@@ -143,6 +160,17 @@ fun MediaViewerScreen(
                         )
                     }
 
+                    // Edit button (only for photos)
+                    if (currentItem != null && !currentItem.isVideo) {
+                        IconButton(onClick = { showEditor = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit photo",
+                                tint = Color.White
+                            )
+                        }
+                    }
+
                     // Share button (standard offline Android ACTION_SEND intent)
                     IconButton(
                         onClick = {
@@ -193,22 +221,51 @@ fun MediaViewerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (currentItem?.aiCategory != null && currentItem.aiCategory != AiCategory.UNCATEGORIZED) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0x44389BF2))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "${currentItem.aiCategory.emoji} ${currentItem.aiCategory.displayName}",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (currentItem?.aiCategory != null && currentItem.aiCategory != AiCategory.UNCATEGORIZED) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0x44389BF2))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "${currentItem.aiCategory.emoji} ${currentItem.aiCategory.displayName}",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
-                    } else {
-                        Spacer(modifier = Modifier.width(8.dp))
+
+                        if (currentItem?.isVideo == false) {
+                            if (currentItem.aiCategory != AiCategory.UNCATEGORIZED) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color(0xFF389BF2))
+                                    .clickable { showEditor = true }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Edit",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Edit Photo",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Text(
