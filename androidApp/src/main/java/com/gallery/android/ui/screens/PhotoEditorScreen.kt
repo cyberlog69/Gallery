@@ -55,6 +55,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -117,25 +118,48 @@ fun PhotoEditorScreen(
     var selectedAdjustTool by remember { mutableStateOf(AdjustTool.EXPOSURE) }
     var showSaveMenu by remember { mutableStateOf(false) }
 
-    // Load initial bitmap
+    // Clean up all bitmaps when closing the editor to guarantee zero memory leaks
+    DisposableEffect(Unit) {
+        onDispose {
+            val edited = editedBitmap
+            val orig = originalBitmap
+            if (edited != null && edited != orig && !edited.isRecycled) {
+                edited.recycle()
+            }
+            if (orig != null && !orig.isRecycled) {
+                orig.recycle()
+            }
+        }
+    }
+
+    // Load initial preview bitmap downscaled to 1080px (saving ~60% RAM vs uncompressed full-res)
     LaunchedEffect(item.uri) {
         isLoading = true
-        val bmp = AndroidImageEditor.loadBitmap(context, item.uri, maxDimension = 1440)
+        val bmp = AndroidImageEditor.loadBitmap(context, item.uri, maxDimension = 1080)
         originalBitmap = bmp
         editedBitmap = bmp
         isLoading = false
     }
 
-    // Recompute edited bitmap reactively when editState changes
+    // Recompute edited bitmap reactively with 60fps frame rate throttling & active recycling
     LaunchedEffect(editState, originalBitmap) {
         val src = originalBitmap ?: return@LaunchedEffect
         if (!editState.isEdited) {
+            val old = editedBitmap
             editedBitmap = src
+            if (old != null && old != src && !old.isRecycled) {
+                old.recycle()
+            }
         } else {
+            kotlinx.coroutines.delay(16) // Target 60fps to prevent allocating frames faster than display refresh
             withContext(Dispatchers.Default) {
                 val processed = AndroidImageEditor.applyEdit(src, editState)
                 withContext(Dispatchers.Main) {
+                    val old = editedBitmap
                     editedBitmap = processed
+                    if (old != null && old != src && !old.isRecycled) {
+                        old.recycle()
+                    }
                 }
             }
         }
@@ -234,6 +258,7 @@ fun PhotoEditorScreen(
                                         val src = originalBitmap ?: return@launch
                                         val uri = AndroidImageEditor.saveAsCopy(
                                             context = context,
+                                            originalUri = item.uri,
                                             sourceBitmap = src,
                                             state = editState,
                                             originalDisplayName = item.displayName

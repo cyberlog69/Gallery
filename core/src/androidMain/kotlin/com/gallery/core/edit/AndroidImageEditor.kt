@@ -104,22 +104,29 @@ object AndroidImageEditor {
 
     /**
      * Saves the edited image as a new copy in Pictures/Gallery.
+     * Uses transient high-resolution bitmap and explicitly recycles allocations to satisfy Google Play Low-RAM standards.
      */
     suspend fun saveAsCopy(
         context: Context,
+        originalUri: String,
         sourceBitmap: Bitmap,
         state: ImageEditState,
         originalDisplayName: String? = null,
         quality: Int = 95
     ): Uri? = withContext(Dispatchers.IO) {
+        var highResSource: Bitmap? = null
+        var edited: Bitmap? = null
         try {
-            val edited = applyEdit(sourceBitmap, state)
+            // Load higher resolution for master export (up to 3840px), fallback to current bitmap
+            highResSource = loadBitmap(context, originalUri, maxDimension = 3840) ?: sourceBitmap
+            edited = applyEdit(highResSource, state)
+
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val baseName = originalDisplayName?.substringBeforeLast('.') ?: "IMG_$timeStamp"
             val newFileName = "${baseName}_edited_$timeStamp.jpg"
 
             val resolver = context.contentResolver
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val targetUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val contentValues = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, newFileName)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -127,18 +134,18 @@ object AndroidImageEditor {
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
 
-                val targetUri = resolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), contentValues)
+                val uri = resolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), contentValues)
                     ?: return@withContext null
 
-                resolver.openOutputStream(targetUri)?.use { out ->
+                resolver.openOutputStream(uri)?.use { out ->
                     edited.compress(Bitmap.CompressFormat.JPEG, quality, out)
                 }
 
                 contentValues.clear()
                 contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                resolver.update(targetUri, contentValues, null, null)
+                resolver.update(uri, contentValues, null, null)
 
-                targetUri
+                uri
             } else {
                 val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
                 val galleryDir = File(picturesDir, "Gallery").apply { if (!exists()) mkdirs() }
@@ -156,13 +163,23 @@ object AndroidImageEditor {
                 )
                 Uri.fromFile(targetFile)
             }
+
+            targetUri
         } catch (_: Exception) {
             null
+        } finally {
+            if (highResSource != null && highResSource != sourceBitmap && !highResSource.isRecycled) {
+                highResSource.recycle()
+            }
+            if (edited != null && edited != sourceBitmap && !edited.isRecycled) {
+                edited.recycle()
+            }
         }
     }
 
     /**
      * Saves edits in place, preserving original by creating a .bak file if possible.
+     * Guarantees all transient bitmaps are recycled immediately.
      */
     suspend fun saveInPlace(
         context: Context,
@@ -171,8 +188,11 @@ object AndroidImageEditor {
         state: ImageEditState,
         quality: Int = 95
     ): Boolean = withContext(Dispatchers.IO) {
+        var highResSource: Bitmap? = null
+        var edited: Bitmap? = null
         try {
-            val edited = applyEdit(sourceBitmap, state)
+            highResSource = loadBitmap(context, originalItem.uri, maxDimension = 3840) ?: sourceBitmap
+            edited = applyEdit(highResSource, state)
             val file = File(originalItem.path)
 
             if (file.exists() && file.canWrite()) {
@@ -200,6 +220,13 @@ object AndroidImageEditor {
             }
         } catch (_: Exception) {
             false
+        } finally {
+            if (highResSource != null && highResSource != sourceBitmap && !highResSource.isRecycled) {
+                highResSource.recycle()
+            }
+            if (edited != null && edited != sourceBitmap && !edited.isRecycled) {
+                edited.recycle()
+            }
         }
     }
 

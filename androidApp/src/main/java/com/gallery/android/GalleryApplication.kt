@@ -42,4 +42,18 @@ class GalleryApplication : Application(), ImageLoaderFactory {
             .crossfade(true)
             .build()
     }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        try {
+            coil.Coil.imageLoader(this).memoryCache?.trimMemory(level)
+        } catch (_: Exception) {}
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        try {
+            coil.Coil.imageLoader(this).memoryCache?.clear()
+        } catch (_: Exception) {}
+    }
 }

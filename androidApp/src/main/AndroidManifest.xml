@@ -18,6 +18,7 @@
     <application
         android:name=".GalleryApplication"
         android:allowBackup="true"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Gallery"
         android:roundIcon="@mipmap/ic_launcher_round"
