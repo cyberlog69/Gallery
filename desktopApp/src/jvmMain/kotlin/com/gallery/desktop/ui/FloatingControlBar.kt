@@ -23,11 +23,14 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.Difference
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RotateLeft
 import androidx.compose.material.icons.filled.RotateRight
@@ -69,6 +72,12 @@ import com.gallery.desktop.ui.theme.PicasaPillBackground
 import com.gallery.desktop.ui.theme.PicasaTextPrimary
 import com.gallery.desktop.ui.theme.PicasaTextSecondary
 
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Tune
+import com.gallery.desktop.ui.theme.PicasaStarYellow
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FloatingControlBar(
@@ -95,6 +104,14 @@ fun FloatingControlBar(
     onCheckUpdate: (() -> Unit)? = null,
     isAeroTheme: Boolean = true,
     onToggleAeroTheme: (() -> Unit)? = null,
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
+    isEditing: Boolean = false,
+    onToggleEditing: (() -> Unit)? = null,
+    duplicateCount: Int = 0,
+    onToggleDuplicates: (() -> Unit)? = null,
+    onCopyImage: (() -> Unit)? = null,
+    onPrint: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val pillShape = RoundedCornerShape(28.dp)
@@ -234,6 +251,62 @@ fun FloatingControlBar(
                 isAeroTheme = isAeroTheme,
                 onClick = onToggleExif
             )
+
+            // Star / Favorite Toggle
+            if (onToggleFavorite != null) {
+                PicasaIconButton(
+                    icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = if (isFavorite) "Starred Favorite" else "Star as Favorite (S)",
+                    tint = if (isFavorite) PicasaStarYellow else PicasaTextPrimary,
+                    isActive = isFavorite,
+                    isAeroTheme = isAeroTheme,
+                    onClick = onToggleFavorite
+                )
+            }
+
+            // Image Adjustments / Edit Toggle
+            if (onToggleEditing != null) {
+                PicasaIconButton(
+                    icon = Icons.Default.Tune,
+                    contentDescription = "Image Adjustments (E)",
+                    tint = if (isEditing) (if (isAeroTheme) AeroAccent else PicasaAccent) else PicasaTextPrimary,
+                    isActive = isEditing,
+                    isAeroTheme = isAeroTheme,
+                    onClick = onToggleEditing
+                )
+            }
+
+            // Duplicates & Burst Photos Finder
+            if (onToggleDuplicates != null) {
+                PicasaIconButton(
+                    icon = Icons.Default.Difference,
+                    contentDescription = if (duplicateCount > 0) "$duplicateCount Duplicates Found" else "Find Duplicates & Bursts (D)",
+                    tint = if (duplicateCount > 0) Color(0xFFFF5252) else PicasaTextPrimary,
+                    isActive = duplicateCount > 0,
+                    isAeroTheme = isAeroTheme,
+                    onClick = onToggleDuplicates
+                )
+            }
+
+            // Copy to Clipboard (Ctrl+C)
+            if (onCopyImage != null) {
+                PicasaIconButton(
+                    icon = Icons.Default.ContentCopy,
+                    contentDescription = "Copy Image to Clipboard (Ctrl+C)",
+                    isAeroTheme = isAeroTheme,
+                    onClick = onCopyImage
+                )
+            }
+
+            // Print Photo Dialog (Ctrl+P)
+            if (onPrint != null) {
+                PicasaIconButton(
+                    icon = Icons.Default.Print,
+                    contentDescription = "Print Photo (Ctrl+P)",
+                    isAeroTheme = isAeroTheme,
+                    onClick = onPrint
+                )
+            }
 
             // Filmstrip Toggle
             PicasaIconButton(

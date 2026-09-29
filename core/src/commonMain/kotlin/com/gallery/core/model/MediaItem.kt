@@ -68,10 +68,38 @@ data class MediaItem(
     val aiCategory: AiCategory = AiCategory.UNCATEGORIZED,
     val aiConfidence: Float = 0.0f,
     val isFavorite: Boolean = false,
-    val exifData: ExifData? = null
+    val exifData: ExifData? = null,
+    val editState: ImageEditState = ImageEditState.DEFAULT,
+    val tags: List<String> = emptyList(),
+    val perceptualHash: ULong = 0UL,
+    val isVaulted: Boolean = false,
+    val embeddingVector: FloatArray? = null,
+    val faceIds: List<String> = emptyList()
 ) {
     val isVideo: Boolean get() = mediaType == MediaType.VIDEO
     val isImage: Boolean get() = mediaType == MediaType.IMAGE
+    val hasEdits: Boolean get() = editState.isEdited
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MediaItem) return false
+        return id == other.id &&
+               path == other.path &&
+               sizeBytes == other.sizeBytes &&
+               dateModifiedSec == other.dateModifiedSec &&
+               isFavorite == other.isFavorite &&
+               editState == other.editState &&
+               perceptualHash == other.perceptualHash &&
+               isVaulted == other.isVaulted
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + path.hashCode()
+        result = 31 * result + isFavorite.hashCode()
+        result = 31 * result + editState.hashCode()
+        return result
+    }
 
     val formattedDuration: String
         get() {

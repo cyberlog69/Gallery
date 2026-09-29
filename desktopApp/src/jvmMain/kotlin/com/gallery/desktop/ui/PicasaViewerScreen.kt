@@ -88,6 +88,11 @@ fun PicasaViewerScreen(
     val isDownloading by viewModel.isDownloading.collectAsState()
     val showSetDefaultDialog by viewModel.showSetDefaultDialog.collectAsState()
     val isAeroTheme by viewModel.isAeroTheme.collectAsState()
+    val isFavorite by viewModel.isCurrentFavorite.collectAsState()
+    val editState by viewModel.currentEditState.collectAsState()
+    val showEditor by viewModel.showEditor.collectAsState()
+    val duplicateClusters by viewModel.duplicateClusters.collectAsState()
+    val showDuplicatePanel by viewModel.showDuplicatePanel.collectAsState()
 
     val currentItem = viewModel.currentItem
 
@@ -185,6 +190,12 @@ fun PicasaViewerScreen(
                         text = "Supports: JPEG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF, RAW, MP4, MKV, AVI, MOV",
                         fontSize = 11.sp,
                         color = Color(0x77FFFFFF)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Or drag & drop photos or folders anywhere into this window",
+                        fontSize = 12.sp,
+                        color = if (isAeroTheme) AeroAccent else PicasaAccent
                     )
                 }
             }
@@ -320,6 +331,38 @@ fun PicasaViewerScreen(
                 )
             }
 
+            // Non-Destructive Photo Adjustments Panel
+            if (showEditor && currentItem?.isImage == true) {
+                PhotoEditorPanel(
+                    editState = editState,
+                    onEditChange = { viewModel.updateEditState(it) },
+                    onReset = { viewModel.resetEdits() },
+                    onSaveCopy = { viewModel.saveEditedCopy() },
+                    onSaveInPlace = { viewModel.saveEditedInPlace() },
+                    onClose = { viewModel.toggleEditor() },
+                    isAeroTheme = isAeroTheme,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 24.dp)
+                )
+            }
+
+            // Duplicate & Similar Photos Panel
+            if (showDuplicatePanel) {
+                DuplicatesPanel(
+                    clusters = duplicateClusters,
+                    onSelectMedia = { target ->
+                        val idx = mediaItems.indexOfFirst { it.id == target.id }
+                        if (idx >= 0) viewModel.selectIndex(idx)
+                    },
+                    onClose = { viewModel.toggleDuplicatePanel() },
+                    isAeroTheme = isAeroTheme,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 24.dp)
+                )
+            }
+
             // Bottom Controls Section
             Column(
                 modifier = Modifier
@@ -358,6 +401,14 @@ fun PicasaViewerScreen(
                     },
                     isAeroTheme = isAeroTheme,
                     onToggleAeroTheme = { viewModel.toggleAeroTheme() },
+                    isFavorite = isFavorite,
+                    onToggleFavorite = { viewModel.toggleFavorite() },
+                    isEditing = showEditor,
+                    onToggleEditing = { viewModel.toggleEditor() },
+                    duplicateCount = duplicateClusters.size,
+                    onToggleDuplicates = { viewModel.toggleDuplicatePanel() },
+                    onCopyImage = { viewModel.copyCurrentToClipboard() },
+                    onPrint = { viewModel.openPrintDialog() },
                     modifier = Modifier.padding(bottom = if (showFilmstrip) 12.dp else 24.dp)
                 )
 
@@ -394,6 +445,16 @@ fun PicasaViewerScreen(
             SetDefaultViewerDialog(
                 sampleFile = currentItem?.path?.let { File(it) },
                 onDismiss = { viewModel.dismissSetDefaultDialog() }
+            )
+        }
+
+        // Print Layout Dialog
+        val showPrintDialog by viewModel.showPrintDialog.collectAsState()
+        if (showPrintDialog) {
+            PrintDialog(
+                rawImage = viewModel.rawImage,
+                onDismiss = { viewModel.dismissPrintDialog() },
+                isAeroTheme = isAeroTheme
             )
         }
     }

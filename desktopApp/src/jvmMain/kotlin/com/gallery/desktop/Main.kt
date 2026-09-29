@@ -87,6 +87,30 @@ fun main(args: Array<String>) = application {
                         viewModel.toggleAeroTheme()
                         true
                     }
+                    Key.E -> {
+                        viewModel.toggleEditor()
+                        true
+                    }
+                    Key.S -> {
+                        viewModel.toggleFavorite()
+                        true
+                    }
+                    Key.D -> {
+                        viewModel.toggleDuplicatePanel()
+                        true
+                    }
+                    Key.C -> {
+                        if (event.isCtrlPressed) {
+                            viewModel.copyCurrentToClipboard()
+                            true
+                        } else false
+                    }
+                    Key.P -> {
+                        if (event.isCtrlPressed) {
+                            viewModel.openPrintDialog()
+                            true
+                        } else false
+                    }
                     Key.Delete -> {
                         viewModel.deleteCurrent()
                         true
@@ -108,6 +132,31 @@ fun main(args: Array<String>) = application {
             } else false
         }
     ) {
+        // Native OS Drag-and-Drop file and folder loading
+        LaunchedEffect(window) {
+            window.dropTarget = object : java.awt.dnd.DropTarget() {
+                override fun drop(evt: java.awt.dnd.DropTargetDropEvent) {
+                    try {
+                        evt.acceptDrop(java.awt.dnd.DnDConstants.ACTION_COPY)
+                        val droppedFiles = evt.transferable.getTransferData(
+                            java.awt.datatransfer.DataFlavor.javaFileListFlavor
+                        ) as? List<*>
+                        val firstFile = droppedFiles?.firstOrNull() as? java.io.File
+                        if (firstFile != null && firstFile.exists()) {
+                            val folder = if (firstFile.isDirectory) firstFile else firstFile.parentFile
+                            if (folder != null) {
+                                val targetFile = if (firstFile.isFile) firstFile else null
+                                viewModel.loadFolder(folder, targetFile)
+                            }
+                        }
+                        evt.dropComplete(true)
+                    } catch (e: Exception) {
+                        evt.dropComplete(false)
+                    }
+                }
+            }
+        }
+
         PicasaTheme {
             PicasaViewerScreen(viewModel = viewModel)
         }

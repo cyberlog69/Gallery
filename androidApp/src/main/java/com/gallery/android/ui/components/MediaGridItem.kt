@@ -26,10 +26,21 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.gallery.core.model.MediaItem
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material3.MaterialTheme
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaGridItem(
     item: MediaItem,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -40,7 +51,15 @@ fun MediaGridItem(
             .padding(1.5.dp)
             .clip(RoundedCornerShape(4.dp))
             .background(Color(0xFF22242B))
-            .clickable { onClick() }
+            .then(
+                if (isSelected) {
+                    Modifier.border(2.5.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
+                } else Modifier
+            )
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         AsyncImage(
             model = ImageRequest.Builder(context)
@@ -52,6 +71,31 @@ fun MediaGridItem(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+
+        // Selection Checkmark Badge
+        if (isSelectionMode) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp)
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.RadioButtonUnchecked,
+                        contentDescription = "Unselected",
+                        tint = Color(0xAAFFFFFF),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
 
         // Video Badge & Duration
         if (item.isVideo) {

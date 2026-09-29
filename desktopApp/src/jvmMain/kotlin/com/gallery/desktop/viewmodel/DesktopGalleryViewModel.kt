@@ -21,13 +21,19 @@ import com.gallery.core.updater.UpdateChecker
 import com.gallery.core.updater.UpdateInfo
 import com.gallery.desktop.updater.DesktopAppUpdater
 import com.gallery.desktop.updater.DesktopDownloadProgress
+import com.gallery.core.ai.DuplicateCluster
+import com.gallery.core.ai.PerceptualHasher
+import com.gallery.core.edit.DesktopImageEditor
+import com.gallery.core.model.ImageEditState
+import com.gallery.core.persistence.DesktopMetadataStore
+import java.awt.image.BufferedImage
 import java.io.File
 
 class DesktopGalleryViewModel(
     private val scope: CoroutineScope
 ) {
     companion object {
-        const val APP_VERSION = "1.0.2"
+        const val APP_VERSION = "1.1.0"
     }
 
     private val _mediaItems = MutableStateFlow<List<MediaItem>>(emptyList())
@@ -57,6 +63,32 @@ class DesktopGalleryViewModel(
 
     private val _isAeroTheme = MutableStateFlow(true)
     val isAeroTheme: StateFlow<Boolean> = _isAeroTheme.asStateFlow()
+
+    private val _showPrintDialog = MutableStateFlow(false)
+    val showPrintDialog: StateFlow<Boolean> = _showPrintDialog.asStateFlow()
+
+    fun openPrintDialog() { _showPrintDialog.value = true }
+    fun dismissPrintDialog() { _showPrintDialog.value = false }
+
+    // Architecture Evolution: Persistence, Non-Destructive Editing, and Perceptual AI
+    private val metadataStore = DesktopMetadataStore()
+
+    private val _isCurrentFavorite = MutableStateFlow(false)
+    val isCurrentFavorite: StateFlow<Boolean> = _isCurrentFavorite.asStateFlow()
+
+    private val _currentEditState = MutableStateFlow(ImageEditState.DEFAULT)
+    val currentEditState: StateFlow<ImageEditState> = _currentEditState.asStateFlow()
+
+    private val _showEditor = MutableStateFlow(false)
+    val showEditor: StateFlow<Boolean> = _showEditor.asStateFlow()
+
+    private val _duplicateClusters = MutableStateFlow<List<DuplicateCluster>>(emptyList())
+    val duplicateClusters: StateFlow<List<DuplicateCluster>> = _duplicateClusters.asStateFlow()
+
+    private val _showDuplicatePanel = MutableStateFlow(false)
+    val showDuplicatePanel: StateFlow<Boolean> = _showDuplicatePanel.asStateFlow()
+
+    private var rawLoadedImage: BufferedImage? = null
 
     private var downloadJob: Job? = null
 
@@ -233,18 +265,33 @@ class DesktopGalleryViewModel(
             if (!file.exists()) return@launch
 
             if (item.isImage) {
+                // Persistent favorite
+                _isCurrentFavorite.value = metadataStore.isFavorite(item.id)
+                // Persistent edit state
+                val edit = metadataStore.getEditState(item.id)
+                _currentEditState.value = edit
+
                 // High-resolution preview downscaled to 1920 to keep RAM below ~20MB
                 val buff = DesktopImageDecoder.loadThumbnail(file, targetSizePx = 1920)
+                rawLoadedImage = buff
                 if (buff != null) {
-                    _currentBitmap.value = buff.toComposeImageBitmap()
+                    val rendered = if (edit.isEdited) {
+                        DesktopImageEditor.applyEdit(buff, edit)
+                    } else {
+                        buff
+                    }
+                    _currentBitmap.value = rendered.toComposeImageBitmap()
                 }
 
                 // Run offline AI classification in background
                 val ai = DesktopImageDecoder.classifyImage(file)
                 _currentAiResult.value = ai
             } else {
+                _isCurrentFavorite.value = metadataStore.isFavorite(item.id)
+                _currentEditState.value = ImageEditState.DEFAULT
                 // Video: generate first-frame thumbnail for preview
                 val buff = DesktopImageDecoder.loadThumbnail(file, targetSizePx = 1280)
+                rawLoadedImage = buff
                 if (buff != null) {
                     _currentBitmap.value = buff.toComposeImageBitmap()
                 }
@@ -257,7 +304,7 @@ class DesktopGalleryViewModel(
         val item = currentItem ?: return
         val file = File(item.path)
         if (file.exists()) {
-            file.delete()
+            com.gallery.core.io.DesktopRecycleBin.moveToRecycleBin(file)
         }
         val list = _mediaItems.value.toMutableList()
         list.remove(item)
@@ -267,6 +314,24 @@ class DesktopGalleryViewModel(
         } else {
             _currentBitmap.value = null
         }
+    }
+
+    fun batchDelete(items: List<MediaItem>) {
+        val files = items.map { File(it.path) }
+        com.gallery.core.io.DesktopRecycleBin.batchMoveToRecycleBin(files)
+        val remaining = _mediaItems.value.filter { item -> !items.any { it.id == item.id } }
+        _mediaItems.value = remaining
+        if (remaining.isNotEmpty()) {
+            selectIndex(_currentIndex.value.coerceIn(0, remaining.size - 1))
+        } else {
+            _currentBitmap.value = null
+        }
+    }
+
+    fun batchRenameSelectedWithDate(items: List<MediaItem>) {
+        val files = items.map { File(it.path) }
+        com.gallery.core.io.DesktopRecycleBin.batchRenameWithDate(files)
+        _currentFolder.value?.let { loadFolder(it) }
     }
 
     init {
@@ -345,5 +410,108 @@ class DesktopGalleryViewModel(
 
     fun toggleAeroTheme() {
         _isAeroTheme.value = !_isAeroTheme.value
+    }
+
+    fun toggleFavorite() {
+        val item = currentItem ?: return
+        val newState = metadataStore.toggleFavorite(item.id)
+        _isCurrentFavorite.value = newState
+    }
+
+    fun toggleEditor() {
+        _showEditor.value = !_showEditor.value
+        if (_showEditor.value) {
+            _showDuplicatePanel.value = false
+        }
+    }
+
+    fun updateEditState(state: ImageEditState) {
+        val item = currentItem ?: return
+        _currentEditState.value = state
+        metadataStore.setEditState(item.id, state)
+
+        val raw = rawLoadedImage ?: return
+        val edited = DesktopImageEditor.applyEdit(raw, state)
+        _currentBitmap.value = edited.toComposeImageBitmap()
+    }
+
+    fun resetEdits() {
+        val item = currentItem ?: return
+        _currentEditState.value = ImageEditState.DEFAULT
+        metadataStore.clearEditState(item.id)
+        val raw = rawLoadedImage ?: return
+        _currentBitmap.value = raw.toComposeImageBitmap()
+    }
+
+    fun saveEditedCopy() {
+        val item = currentItem ?: return
+        val raw = rawLoadedImage ?: return
+        val sourceFile = File(item.path)
+        val baseName = sourceFile.nameWithoutExtension
+        val ext = sourceFile.extension.ifEmpty { "jpg" }
+        val target = File(sourceFile.parentFile, "${baseName}_edited.$ext")
+        DesktopImageEditor.exportToFile(raw, _currentEditState.value, target, ext)
+        _currentFolder.value?.let { loadFolder(it, target) }
+    }
+
+    fun saveEditedInPlace() {
+        val item = currentItem ?: return
+        val raw = rawLoadedImage ?: return
+        val sourceFile = File(item.path)
+        val ext = sourceFile.extension.ifEmpty { "jpg" }
+        val success = DesktopImageEditor.saveInPlaceWithBackup(sourceFile, raw, _currentEditState.value, ext)
+        if (success) {
+            _currentEditState.value = ImageEditState.DEFAULT
+            metadataStore.clearEditState(item.id)
+            _currentFolder.value?.let { loadFolder(it, sourceFile) }
+        }
+    }
+
+    val rawImage: java.awt.image.BufferedImage? get() = rawLoadedImage
+
+    fun copyCurrentToClipboard(): Boolean {
+        val raw = rawLoadedImage ?: return false
+        val edit = _currentEditState.value
+        val imageToCopy = if (edit.isEdited) {
+            DesktopImageEditor.applyEdit(raw, edit)
+        } else {
+            raw
+        }
+        return com.gallery.core.io.DesktopClipboardHelper.copyImageToClipboard(imageToCopy)
+    }
+
+    fun toggleDuplicatePanel() {
+        _showDuplicatePanel.value = !_showDuplicatePanel.value
+        if (_showDuplicatePanel.value) {
+            _showEditor.value = false
+            if (_duplicateClusters.value.isEmpty()) {
+                scanForDuplicates()
+            }
+        }
+    }
+
+    fun scanForDuplicates() {
+        scope.launch(Dispatchers.Default) {
+            val items = _mediaItems.value.filter { it.isImage }
+            if (items.size < 2) return@launch
+
+            val hashedItems = items.mapNotNull { item ->
+                var hash = metadataStore.getPerceptualHash(item.id)
+                if (hash == 0UL) {
+                    val file = File(item.path)
+                    val thumb = DesktopImageDecoder.loadThumbnail(file, targetSizePx = 64)
+                    if (thumb != null) {
+                        val pixels = IntArray(thumb.width * thumb.height)
+                        thumb.getRGB(0, 0, thumb.width, thumb.height, pixels, 0, thumb.width)
+                        hash = PerceptualHasher.computeDHash(pixels, thumb.width, thumb.height)
+                        metadataStore.setPerceptualHash(item.id, hash)
+                    }
+                }
+                if (hash != 0UL) item to hash else null
+            }
+
+            val clusters = PerceptualHasher.clusterDuplicates(hashedItems, maxDistance = 4)
+            _duplicateClusters.value = clusters
+        }
     }
 }

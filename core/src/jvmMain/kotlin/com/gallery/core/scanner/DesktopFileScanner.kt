@@ -56,7 +56,7 @@ object DesktopFileScanner {
                     if (file.isDirectory && recursive && !file.isHidden && !file.name.startsWith(".")) {
                         scanPath(path, recursive, currentDepth + 1, maxDepth, onItemFound)
                     } else if (file.isFile && MediaFormatDetector.isSupported(file.name)) {
-                        val mediaItem = buildMediaItem(file)
+                        val mediaItem = IncrementalDesktopScanner.INSTANCE.getOrIndexFile(file)
                         onItemFound(mediaItem)
                     }
                 }

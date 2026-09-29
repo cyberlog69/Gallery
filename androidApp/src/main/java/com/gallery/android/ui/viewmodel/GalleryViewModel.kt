@@ -35,7 +35,7 @@ import java.io.File
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
-        const val APP_VERSION = "1.0.1"
+        const val APP_VERSION = "1.1.0"
     }
 
     private val _mediaItems = MutableStateFlow<List<MediaItem>>(emptyList())
@@ -71,6 +71,15 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    private val _isFavoriteFilter = MutableStateFlow(false)
+    val isFavoriteFilter: StateFlow<Boolean> = _isFavoriteFilter.asStateFlow()
+
+    private val _selectedItemIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedItemIds: StateFlow<Set<String>> = _selectedItemIds.asStateFlow()
+
+    val isSelectionMode: StateFlow<Boolean> = _selectedItemIds.map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
     private val _gridColumns = MutableStateFlow(3)
     val gridColumns: StateFlow<Int> = _gridColumns.asStateFlow()
 
@@ -100,16 +109,21 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         else items.filter { it.albumName == albumName }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Filtered items based on active AI category and search query
+    // Filtered items based on active AI category, favorite filter, and search query
     val filteredMedia: StateFlow<List<MediaItem>> = combine(
         _mediaItems,
         _selectedCategory,
-        _searchQuery
-    ) { items, category, query ->
+        _searchQuery,
+        _isFavoriteFilter
+    ) { items, category, query, favoriteOnly ->
         items.filter { item ->
             val matchesCategory = category == null || item.aiCategory == category
-            val matchesQuery = query.isBlank() || item.displayName.contains(query, ignoreCase = true)
-            matchesCategory && matchesQuery
+            val matchesFavorite = !favoriteOnly || item.isFavorite
+            val matchesQuery = query.isBlank() ||
+                    item.displayName.contains(query, ignoreCase = true) ||
+                    item.albumName.contains(query, ignoreCase = true) ||
+                    item.tags.any { it.contains(query, ignoreCase = true) }
+            matchesCategory && matchesFavorite && matchesQuery
         }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -212,6 +226,47 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun closeViewer() {
         _selectedItemIndex.value = null
+    }
+
+    fun toggleFavoriteFilter() {
+        _isFavoriteFilter.value = !_isFavoriteFilter.value
+    }
+
+    fun toggleItemSelection(id: String) {
+        val current = _selectedItemIds.value.toMutableSet()
+        if (current.contains(id)) {
+            current.remove(id)
+        } else {
+            current.add(id)
+        }
+        _selectedItemIds.value = current
+    }
+
+    fun selectAll() {
+        _selectedItemIds.value = filteredMedia.value.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        _selectedItemIds.value = emptySet()
+    }
+
+    fun batchToggleFavoriteSelected() {
+        val selected = _selectedItemIds.value
+        if (selected.isEmpty()) return
+        val currentItems = _mediaItems.value
+        val anyUnfavorite = currentItems.any { selected.contains(it.id) && !it.isFavorite }
+        _mediaItems.value = currentItems.map { item ->
+            if (selected.contains(item.id)) item.copy(isFavorite = anyUnfavorite) else item
+        }
+        clearSelection()
+    }
+
+    fun batchDeleteSelected() {
+        val selected = _selectedItemIds.value
+        if (selected.isEmpty()) return
+        val remaining = _mediaItems.value.filter { !selected.contains(it.id) }
+        _mediaItems.value = remaining
+        clearSelection()
     }
 
     init {
