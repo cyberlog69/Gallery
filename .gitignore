@@ -23,3 +23,8 @@ Thumbs.db
 
 # Caches
 .gallery_cache/
+
+# Local documents & Roadmap (do not upload to GitHub)
+ROADMAP.md
+ROADMAP*.md
+
