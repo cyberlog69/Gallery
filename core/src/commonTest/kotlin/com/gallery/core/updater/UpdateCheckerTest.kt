@@ -59,9 +59,5 @@ class UpdateCheckerTest {
         assertNotNull(info.apkAsset)
         assertEquals("androidApp-debug.apk", info.apkAsset?.name)
         assertEquals(22020096L, info.apkAsset?.sizeBytes)
-
-        assertNotNull(info.desktopAsset)
-        assertEquals("PicasaGalleryViewer-windows-x64-1.1.0.jar", info.desktopAsset?.name)
-        assertEquals(78643200L, info.desktopAsset?.sizeBytes)
     }
 }

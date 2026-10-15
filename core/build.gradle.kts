@@ -4,7 +4,6 @@ plugins {
 }
 
 kotlin {
-    jvm()
     androidTarget {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -18,9 +17,6 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.junit)
-        }
-        jvmMain.dependencies {
-            implementation(libs.kotlinx.coroutines.swing)
         }
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutines.android)

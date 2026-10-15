@@ -22,5 +22,4 @@ dependencyResolutionManagement {
 rootProject.name = "Gallery"
 
 include(":core")
-include(":desktopApp")
 include(":androidApp")

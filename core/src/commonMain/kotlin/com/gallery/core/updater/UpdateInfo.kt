@@ -25,19 +25,8 @@ data class UpdateInfo(
     val apkAsset: ReleaseAsset?
         get() = assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
 
-    val desktopAsset: ReleaseAsset?
-        get() = assets.firstOrNull {
-            it.name.endsWith(".jar", ignoreCase = true) ||
-            it.name.endsWith(".msi", ignoreCase = true) ||
-            it.name.endsWith(".exe", ignoreCase = true) ||
-            it.name.endsWith(".deb", ignoreCase = true)
-        }
-
     val formattedApkSize: String
         get() = formatBytes(apkAsset?.sizeBytes ?: 0L)
-
-    val formattedDesktopSize: String
-        get() = formatBytes(desktopAsset?.sizeBytes ?: 0L)
 
     companion object {
         fun formatBytes(bytes: Long): String {
