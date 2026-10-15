@@ -28,6 +28,12 @@ import com.gallery.core.updater.UpdateChecker
 import com.gallery.core.updater.UpdateInfo
 import com.gallery.android.updater.AndroidAppUpdater
 import com.gallery.android.updater.DownloadProgress
+import com.gallery.core.ai.DetectedFace
+import com.gallery.core.ai.FaceDetectionEngine
+import com.gallery.core.ai.OfflineNeuralEngine
+import com.gallery.core.ai.OfflineOcrEngine
+import com.gallery.core.ai.PersonCluster
+import com.gallery.core.ai.SemanticSearchEngine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.map
 import java.io.File
@@ -61,6 +67,20 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     val downloadedApkFile: StateFlow<File?> = _downloadedApkFile.asStateFlow()
 
     private var downloadJob: Job? = null
+
+    // People & Face Clusters
+    private val _peopleClusters = MutableStateFlow<List<PersonCluster>>(emptyList())
+    val peopleClusters: StateFlow<List<PersonCluster>> = _peopleClusters.asStateFlow()
+
+    private val _selectedPerson = MutableStateFlow<PersonCluster?>(null)
+    val selectedPerson: StateFlow<PersonCluster?> = _selectedPerson.asStateFlow()
+
+    // Semantic search feedback state
+    private val _semanticMatchedConcepts = MutableStateFlow<List<String>>(emptyList())
+    val semanticMatchedConcepts: StateFlow<List<String>> = _semanticMatchedConcepts.asStateFlow()
+
+    private val _isSemanticSearchActive = MutableStateFlow(false)
+    val isSemanticSearchActive: StateFlow<Boolean> = _isSemanticSearchActive.asStateFlow()
 
     private val _selectedCategory = MutableStateFlow<AiCategory?>(null)
     val selectedCategory: StateFlow<AiCategory?> = _selectedCategory.asStateFlow()
@@ -109,22 +129,42 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         else items.filter { it.albumName == albumName }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Filtered items based on active AI category, favorite filter, and search query
+    // Filtered items based on active AI category, favorite filter, search query, and selected person
     val filteredMedia: StateFlow<List<MediaItem>> = combine(
         _mediaItems,
         _selectedCategory,
         _searchQuery,
-        _isFavoriteFilter
-    ) { items, category, query, favoriteOnly ->
-        items.filter { item ->
+        _isFavoriteFilter,
+        _selectedPerson
+    ) { items, category, query, favoriteOnly, person ->
+        var candidates = items.filter { item ->
             val matchesCategory = category == null || item.aiCategory == category
             val matchesFavorite = !favoriteOnly || item.isFavorite
-            val matchesQuery = query.isBlank() ||
-                    item.displayName.contains(query, ignoreCase = true) ||
-                    item.albumName.contains(query, ignoreCase = true) ||
-                    item.tags.any { it.contains(query, ignoreCase = true) }
-            matchesCategory && matchesFavorite && matchesQuery
+            val matchesPerson = person == null || person.mediaItemIds.contains(item.id)
+            matchesCategory && matchesFavorite && matchesPerson
         }
+
+        val trimmedQuery = query.trim()
+        if (trimmedQuery.isNotBlank()) {
+            val semanticResults = SemanticSearchEngine.search(trimmedQuery, candidates, minScore = 0.28f)
+            val semanticMatchedIds = semanticResults.map { it.item.id }.toSet()
+
+            _semanticMatchedConcepts.value = semanticResults.flatMap { it.matchedConcepts }.distinct()
+            _isSemanticSearchActive.value = semanticResults.isNotEmpty()
+
+            candidates = candidates.filter { item ->
+                semanticMatchedIds.contains(item.id) ||
+                item.displayName.contains(trimmedQuery, ignoreCase = true) ||
+                item.albumName.contains(trimmedQuery, ignoreCase = true) ||
+                item.tags.any { it.contains(trimmedQuery, ignoreCase = true) } ||
+                (item.ocrText?.contains(trimmedQuery, ignoreCase = true) == true)
+            }
+        } else {
+            _semanticMatchedConcepts.value = emptyList()
+            _isSemanticSearchActive.value = false
+        }
+
+        candidates
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // Group items by human-friendly date header (e.g. "Today", "Yesterday", "August 2026")
@@ -169,10 +209,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.Default) {
             val context = getApplication<Application>()
             val items = _mediaItems.value.toMutableList()
+            val allDetectedFaces = mutableListOf<DetectedFace>()
 
             for (i in items.indices) {
                 val item = items[i]
-                if (item.isImage && item.aiCategory == AiCategory.UNCATEGORIZED) {
+                if (item.isImage && item.quantizedEmbedding == null) {
                     try {
                         val uri = Uri.parse(item.uri)
                         // Decode tiny 64x64 thumbnail for minimal RAM consumption (<16KB per image)
@@ -185,15 +226,59 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                                 val scaled = Bitmap.createScaledBitmap(bmp, 64, 64, true)
                                 val pixels = IntArray(64 * 64)
                                 scaled.getPixels(pixels, 0, 64, 0, 0, 64, 64)
-                                val ai = OfflineAiClassifier.classify(pixels, 64, 64, item.displayName)
+
+                                // 1. Quantized Neural Classification & 256-D Embedding
+                                val neuralResult = OfflineNeuralEngine.processImage(pixels, 64, 64, item.displayName)
+                                val finalCategory = if (neuralResult.category != AiCategory.UNCATEGORIZED) {
+                                    neuralResult.category
+                                } else {
+                                    OfflineAiClassifier.classify(pixels, 64, 64, item.displayName).category
+                                }
+
+                                // 2. Face Detection & 64-D Facial Morphology
+                                val faces = FaceDetectionEngine.detectFaces(pixels, 64, 64, item.id)
+                                if (faces.isNotEmpty()) {
+                                    allDetectedFaces.addAll(faces)
+                                }
+
+                                // 3. Offline OCR & Document Text Extraction
+                                var ocrText: String? = null
+                                if (finalCategory == AiCategory.DOCUMENTS ||
+                                    item.displayName.contains("receipt", ignoreCase = true) ||
+                                    item.displayName.contains("doc", ignoreCase = true) ||
+                                    item.displayName.contains("bill", ignoreCase = true) ||
+                                    item.displayName.contains("scan", ignoreCase = true) ||
+                                    neuralResult.tags.contains("document")
+                                ) {
+                                    val ocr = OfflineOcrEngine.extractText(pixels, 64, 64, item.displayName)
+                                    if (ocr.fullText.isNotBlank()) {
+                                        ocrText = ocr.fullText
+                                    }
+                                }
 
                                 items[i] = item.copy(
-                                    aiCategory = ai.category,
-                                    aiConfidence = ai.confidence
+                                    aiCategory = finalCategory,
+                                    aiConfidence = maxOf(item.aiConfidence, neuralResult.confidence),
+                                    tags = (item.tags + neuralResult.tags).distinct(),
+                                    embeddingVector = neuralResult.embedding,
+                                    quantizedEmbedding = neuralResult.quantizedEmbedding,
+                                    detectedFaceCount = faces.size,
+                                    faceIds = faces.map { it.faceId },
+                                    ocrText = ocrText
                                 )
                                 _mediaItems.value = items.toList()
+
                                 scaled.recycle()
                                 bmp.recycle()
+
+                                // Periodically cluster faces into people albums
+                                if (allDetectedFaces.isNotEmpty() && (i % 5 == 0 || i == items.lastIndex)) {
+                                    val clusters = FaceDetectionEngine.clusterFaces(allDetectedFaces)
+                                    val existingNames = _peopleClusters.value.associate { it.personId to it.name }
+                                    _peopleClusters.value = clusters.map { c ->
+                                        existingNames[c.personId]?.let { customName -> c.copy(name = customName) } ?: c
+                                    }
+                                }
                             }
                         }
                     } catch (e: Exception) {
@@ -201,6 +286,33 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
             }
+
+            // Final face clustering pass
+            if (allDetectedFaces.isNotEmpty()) {
+                val clusters = FaceDetectionEngine.clusterFaces(allDetectedFaces)
+                val existingNames = _peopleClusters.value.associate { it.personId to it.name }
+                _peopleClusters.value = clusters.map { c ->
+                    existingNames[c.personId]?.let { customName -> c.copy(name = customName) } ?: c
+                }
+            }
+        }
+    }
+
+    fun selectPerson(person: PersonCluster?) {
+        _selectedPerson.value = person
+    }
+
+    fun renamePerson(personId: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) return
+        val updated = _peopleClusters.value.map { cluster ->
+            if (cluster.personId == personId) {
+                cluster.copy(name = trimmed)
+            } else cluster
+        }
+        _peopleClusters.value = updated
+        if (_selectedPerson.value?.personId == personId) {
+            _selectedPerson.value = _selectedPerson.value?.copy(name = trimmed)
         }
     }
 

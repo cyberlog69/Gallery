@@ -22,16 +22,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,7 +60,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,6 +96,7 @@ fun MediaViewerScreen(
 
     var showChrome by remember { mutableStateOf(true) }
     var showExifSheet by remember { mutableStateOf(false) }
+    var showOcrSheet by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
     val currentItem = items.getOrNull(pagerState.currentPage)
 
@@ -189,6 +199,17 @@ fun MediaViewerScreen(
                             contentDescription = "Share",
                             tint = Color.White
                         )
+                    }
+
+                    // OCR / Document Text Inspector button (only for photos)
+                    if (currentItem != null && !currentItem.isVideo) {
+                        IconButton(onClick = { showOcrSheet = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = "OCR & Document Text",
+                                tint = if (currentItem.hasOcrText) Color(0xFF389BF2) else Color.White
+                            )
+                        }
                     }
 
                     // Info / EXIF Sheet button
@@ -326,6 +347,157 @@ fun MediaViewerScreen(
                             "AI Tag",
                             "${currentItem.aiCategory.emoji} ${currentItem.aiCategory.displayName} (${(currentItem.aiConfidence * 100).toInt()}%)"
                         )
+                    }
+
+                    if (currentItem.quantizedEmbedding != null) {
+                        DetailRow("Neural Vector", "256-D INT8 Quantized")
+                    }
+                    if (currentItem.detectedFaceCount > 0) {
+                        DetailRow("Faces Detected", "${currentItem.detectedFaceCount}")
+                    }
+                    if (currentItem.hasOcrText) {
+                        DetailRow("OCR Indexed", "Yes (${currentItem.ocrText?.length ?: 0} chars)")
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+
+        // Offline OCR & Document Text Bottom Sheet
+        if (showOcrSheet && currentItem != null) {
+            ModalBottomSheet(
+                onDismissRequest = { showOcrSheet = false },
+                sheetState = rememberModalBottomSheetState()
+            ) {
+                val clipboardManager = LocalClipboardManager.current
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "Document & Text (Offline OCR)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Extracted 100% on-device with zero network usage",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (currentItem.hasOcrText) {
+                            IconButton(onClick = {
+                                clipboardManager.setText(AnnotatedString(currentItem.ocrText ?: ""))
+                                Toast.makeText(context, "Text copied to clipboard", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy text",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (currentItem.hasOcrText) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = currentItem.ocrText ?: "",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(currentItem.ocrText ?: ""))
+                                Toast.makeText(context, "Text copied to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Copy Extracted Text")
+                        }
+                    } else {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Description,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "No Text Detected",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = "Document and receipt images with legible text are automatically extracted during offline indexing.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    if (currentItem.detectedFaceCount > 0) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                .padding(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Face,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "👤 ${currentItem.detectedFaceCount} face${if (currentItem.detectedFaceCount > 1) "s" else ""} recognized in this photo",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))

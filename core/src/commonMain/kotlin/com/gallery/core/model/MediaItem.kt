@@ -74,11 +74,16 @@ data class MediaItem(
     val perceptualHash: ULong = 0UL,
     val isVaulted: Boolean = false,
     val embeddingVector: FloatArray? = null,
-    val faceIds: List<String> = emptyList()
+    val quantizedEmbedding: ByteArray? = null,
+    val faceIds: List<String> = emptyList(),
+    val detectedFaceCount: Int = 0,
+    val ocrText: String? = null
 ) {
     val isVideo: Boolean get() = mediaType == MediaType.VIDEO
     val isImage: Boolean get() = mediaType == MediaType.IMAGE
     val hasEdits: Boolean get() = editState.isEdited
+    val hasOcrText: Boolean get() = !ocrText.isNullOrBlank()
+    val hasFaces: Boolean get() = detectedFaceCount > 0 || faceIds.isNotEmpty()
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

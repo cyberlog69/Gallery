@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -27,8 +28,10 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
@@ -72,6 +75,9 @@ fun TimelineScreen(
     val filteredMedia by viewModel.filteredMedia.collectAsState()
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val selectedPerson by viewModel.selectedPerson.collectAsState()
+    val isSemanticSearchActive by viewModel.isSemanticSearchActive.collectAsState()
+    val semanticMatchedConcepts by viewModel.semanticMatchedConcepts.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
@@ -223,11 +229,61 @@ fun TimelineScreen(
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             )
 
+            // Offline Semantic Search Indicator
+            if (searchQuery.isNotBlank() && isSemanticSearchActive) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Offline Semantic Match: ${if (semanticMatchedConcepts.isNotEmpty()) semanticMatchedConcepts.take(3).joinToString(" • ") else "256-D neural vector"}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             // AI Category & Favorite Filter Chips
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Selected Person Filter Chip
+                if (selectedPerson != null) {
+                    item {
+                        FilterChip(
+                            selected = true,
+                            onClick = { viewModel.selectPerson(null) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Face,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear person filter",
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            },
+                            label = { Text("Person: ${selectedPerson?.name}") }
+                        )
+                    }
+                }
+
                 // Favorites Filter Chip
                 item {
                     FilterChip(
@@ -247,9 +303,10 @@ fun TimelineScreen(
 
                 item {
                     FilterChip(
-                        selected = selectedCategory == null && !isFavoriteFilter,
+                        selected = selectedCategory == null && selectedPerson == null && !isFavoriteFilter,
                         onClick = {
                             viewModel.selectCategory(null)
+                            viewModel.selectPerson(null)
                         },
                         label = { Text("All") }
                     )
