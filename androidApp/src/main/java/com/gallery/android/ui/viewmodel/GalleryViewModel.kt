@@ -41,7 +41,7 @@ import java.io.File
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
-        const val APP_VERSION = "1.1.0"
+        const val APP_VERSION = "1.3.0"
     }
 
     private val _mediaItems = MutableStateFlow<List<MediaItem>>(emptyList())
