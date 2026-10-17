@@ -139,26 +139,55 @@ object UpdateChecker {
         }
         if (endBracket == -1) return emptyList()
 
-        val assetsBlock = json.substring(startBracket, endBracket + 1)
-        val objectRegex = "\\{([^}]+)\\}".toRegex()
+        // Extract each top-level object in the assets array by tracking curly brace depth
+        var inString = false
+        var escape = false
+        var objDepth = 0
+        var objStart = -1
 
-        for (match in objectRegex.findAll(assetsBlock)) {
-            val obj = match.groupValues[1]
-            val name = extractJsonString(obj, "name")
-            val url = extractJsonString(obj, "browser_download_url")
-            val sizeMatch = "\"size\"\\s*:\\s*(\\d+)".toRegex().find(obj)
-            val size = sizeMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
-            val contentType = extractJsonString(obj, "content_type") ?: ""
+        for (i in (startBracket + 1) until endBracket) {
+            val c = json[i]
+            if (escape) {
+                escape = false
+                continue
+            }
+            if (c == '\\') {
+                escape = true
+                continue
+            }
+            if (c == '"') {
+                inString = !inString
+                continue
+            }
+            if (!inString) {
+                if (c == '{') {
+                    if (objDepth == 0) {
+                        objStart = i
+                    }
+                    objDepth++
+                } else if (c == '}') {
+                    objDepth--
+                    if (objDepth == 0 && objStart != -1) {
+                        val obj = json.substring(objStart, i + 1)
+                        val name = extractJsonString(obj, "name")
+                        val url = extractJsonString(obj, "browser_download_url")
+                        val sizeMatch = "\"size\"\\s*:\\s*(\\d+)".toRegex().find(obj)
+                        val size = sizeMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+                        val contentType = extractJsonString(obj, "content_type") ?: ""
 
-            if (name != null && url != null) {
-                assetsList.add(
-                    ReleaseAsset(
-                        name = name,
-                        downloadUrl = url,
-                        sizeBytes = size,
-                        contentType = contentType
-                    )
-                )
+                        if (name != null && url != null) {
+                            assetsList.add(
+                                ReleaseAsset(
+                                    name = name,
+                                    downloadUrl = url,
+                                    sizeBytes = size,
+                                    contentType = contentType
+                                )
+                            )
+                        }
+                        objStart = -1
+                    }
+                }
             }
         }
 

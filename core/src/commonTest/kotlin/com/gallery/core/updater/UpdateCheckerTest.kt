@@ -60,4 +60,42 @@ class UpdateCheckerTest {
         assertEquals("androidApp-debug.apk", info.apkAsset?.name)
         assertEquals(22020096L, info.apkAsset?.sizeBytes)
     }
+
+    @Test
+    fun testParseRealGitHubReleaseJsonWithNestedUploader() {
+        val realJson = """
+        {
+          "url": "https://api.github.com/repos/cyberlog69/Gallery/releases/414232037",
+          "tag_name": "v1.3.0",
+          "name": "v1.3.0 - Phase 2: Offline Intelligence, Semantic Search & Face Clustering",
+          "html_url": "https://github.com/cyberlog69/Gallery/releases/tag/v1.3.0",
+          "body": "Phase 2 offline intelligence release",
+          "assets": [
+            {
+              "url": "https://api.github.com/repos/cyberlog69/Gallery/releases/assets/645044125",
+              "id": 645044125,
+              "name": "Gallery-v1.3.0.apk",
+              "uploader": {
+                "login": "cyberlog69",
+                "id": 52593341,
+                "type": "User"
+              },
+              "content_type": "application/vnd.android.package-archive",
+              "size": 14646485,
+              "browser_download_url": "https://github.com/cyberlog69/Gallery/releases/download/v1.3.0/Gallery-v1.3.0.apk"
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val info = UpdateChecker.parseReleaseJson(realJson)
+
+        assertEquals("v1.3.0", info.tagName)
+        assertEquals("1.3.0", info.versionName)
+        assertEquals(1, info.assets.size)
+        assertNotNull(info.apkAsset)
+        assertEquals("Gallery-v1.3.0.apk", info.apkAsset?.name)
+        assertEquals("https://github.com/cyberlog69/Gallery/releases/download/v1.3.0/Gallery-v1.3.0.apk", info.apkAsset?.downloadUrl)
+        assertEquals(14646485L, info.apkAsset?.sizeBytes)
+    }
 }

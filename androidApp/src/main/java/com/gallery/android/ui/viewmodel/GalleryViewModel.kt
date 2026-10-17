@@ -427,17 +427,19 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun startDownloadUpdate() {
         val info = _updateInfo.value ?: return
-        val apkAsset = info.apkAsset ?: return
+        val downloadUrl = info.apkAsset?.downloadUrl
+            ?: "https://github.com/cyberlog69/Gallery/releases/download/${info.tagName}/Gallery-${info.tagName}.apk"
         if (_isDownloading.value) return
 
         _isDownloading.value = true
+        _downloadProgress.value = DownloadProgress(progress = 0.01f, downloadedBytes = 0L, totalBytes = 0L)
         val context = getApplication<Application>()
 
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {
             AndroidAppUpdater.downloadApk(
                 context = context,
-                downloadUrl = apkAsset.downloadUrl,
+                downloadUrl = downloadUrl,
                 versionName = info.versionName
             ).collect { progress ->
                 _downloadProgress.value = progress

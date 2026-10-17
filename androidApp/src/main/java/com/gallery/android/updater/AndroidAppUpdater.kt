@@ -64,28 +64,51 @@ object AndroidAppUpdater {
         try {
             emit(DownloadProgress(progress = 0.01f, downloadedBytes = 0L, totalBytes = 0L))
 
-            val connection = URI.create(downloadUrl).toURL().openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 10000
-            connection.readTimeout = 30000
-            connection.instanceFollowRedirects = true
+            var currentUrl = downloadUrl
+            var currentConnection = URI.create(currentUrl).toURL().openConnection() as HttpURLConnection
+            currentConnection.requestMethod = "GET"
+            currentConnection.setRequestProperty("User-Agent", "Mozilla/5.0 Gallery-Android-App")
+            currentConnection.connectTimeout = 15000
+            currentConnection.readTimeout = 60000
+            currentConnection.instanceFollowRedirects = true
 
-            // Follow redirects manually if needed (e.g. GitHub release CDN)
-            var redirected = false
-            var currentConnection = connection
-            var status = currentConnection.responseCode
-            if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
-                redirected = true
-                val newUrl = currentConnection.getHeaderField("Location")
-                currentConnection = URI.create(newUrl).toURL().openConnection() as HttpURLConnection
+            // Follow HTTP redirects (e.g. GitHub release CDN to AWS S3) up to 5 hops
+            var redirectCount = 0
+            while (redirectCount < 6) {
+                val code = currentConnection.responseCode
+                if (code == HttpURLConnection.HTTP_MOVED_TEMP ||
+                    code == HttpURLConnection.HTTP_MOVED_PERM ||
+                    code == HttpURLConnection.HTTP_SEE_OTHER ||
+                    code == 307 || code == 308
+                ) {
+                    val location = currentConnection.getHeaderField("Location") ?: break
+                    currentConnection.disconnect()
+                    currentUrl = location
+                    currentConnection = URI.create(currentUrl).toURL().openConnection() as HttpURLConnection
+                    currentConnection.requestMethod = "GET"
+                    currentConnection.setRequestProperty("User-Agent", "Mozilla/5.0 Gallery-Android-App")
+                    currentConnection.connectTimeout = 15000
+                    currentConnection.readTimeout = 60000
+                    currentConnection.instanceFollowRedirects = true
+                    redirectCount++
+                    continue
+                }
+                break
             }
 
-            val totalBytes = currentConnection.contentLength.toLong()
+            val finalStatus = currentConnection.responseCode
+            if (finalStatus !in 200..299) {
+                throw java.io.IOException("Server returned HTTP $finalStatus: ${currentConnection.responseMessage}")
+            }
+
+            val totalBytes = currentConnection.contentLength.toLong().let { if (it > 0) it else 0L }
             var downloadedBytes = 0L
+            val tempFile = File(updatesDir, "Gallery-v$versionName.apk.tmp")
+            if (tempFile.exists()) tempFile.delete()
 
             currentConnection.inputStream.use { input ->
-                FileOutputStream(targetFile).use { output ->
-                    val buffer = ByteArray(16 * 1024)
+                FileOutputStream(tempFile).use { output ->
+                    val buffer = ByteArray(32 * 1024)
                     var bytesRead: Int
                     var lastEmittedProgress = 0f
 
@@ -114,6 +137,9 @@ object AndroidAppUpdater {
                 }
             }
 
+            if (targetFile.exists()) targetFile.delete()
+            tempFile.renameTo(targetFile)
+
             emit(
                 DownloadProgress(
                     progress = 1.0f,
@@ -127,7 +153,7 @@ object AndroidAppUpdater {
             emit(
                 DownloadProgress(
                     progress = 0f,
-                    error = e.message ?: "Download failed"
+                    error = e.message ?: "Download failed. Please check network connection."
                 )
             )
         }

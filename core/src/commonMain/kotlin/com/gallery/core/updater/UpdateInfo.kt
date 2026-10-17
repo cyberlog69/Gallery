@@ -24,6 +24,12 @@ data class UpdateInfo(
 ) {
     val apkAsset: ReleaseAsset?
         get() = assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
+            ?: if (tagName.isNotBlank()) {
+                ReleaseAsset(
+                    name = "Gallery-$tagName.apk",
+                    downloadUrl = "https://github.com/cyberlog69/Gallery/releases/download/$tagName/Gallery-$tagName.apk"
+                )
+            } else null
 
     val formattedApkSize: String
         get() = formatBytes(apkAsset?.sizeBytes ?: 0L)
