@@ -229,9 +229,11 @@ object AndroidAppUpdater {
             apkFile
         )
 
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(apkUri, "application/vnd.android.package-archive")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val installIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_OPEN_UPDATE", true)
+            putExtra("EXTRA_APK_URI", apkUri.toString())
+            putExtra("EXTRA_APK_MIME_TYPE", "application/vnd.android.package-archive")
         }
 
         val pendingIntent = PendingIntent.getActivity(
