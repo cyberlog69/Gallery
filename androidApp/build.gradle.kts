@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -12,8 +14,8 @@ android {
         applicationId = "com.gallery.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -21,10 +23,47 @@ android {
         }
     }
 
+    // Release signing is read from keystore.properties (local dev) or the
+    // GALLERY_* environment variables (CI). When neither is present the release
+    // build stays unsigned instead of silently shipping debug-signed artifacts.
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties().apply {
+        if (keystorePropertiesFile.exists()) {
+            keystorePropertiesFile.inputStream().use { load(it) }
+        }
+    }
+
+    fun signingValue(propertyKey: String, envKey: String): String? =
+        keystoreProperties.getProperty(propertyKey) ?: System.getenv(envKey)
+
+    val releaseStoreFile = signingValue("storeFile", "GALLERY_KEYSTORE_FILE")
+    val releaseStorePassword = signingValue("storePassword", "GALLERY_KEYSTORE_PASSWORD")
+    val releaseKeyAlias = signingValue("keyAlias", "GALLERY_KEY_ALIAS")
+    val releaseKeyPassword = signingValue("keyPassword", "GALLERY_KEY_PASSWORD")
+
+    val hasReleaseSigning = releaseStoreFile != null &&
+            releaseStorePassword != null &&
+            releaseKeyAlias != null &&
+            releaseKeyPassword != null
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -48,6 +87,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

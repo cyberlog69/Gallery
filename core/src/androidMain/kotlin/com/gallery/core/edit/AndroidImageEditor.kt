@@ -65,11 +65,16 @@ object AndroidImageEditor {
                 BitmapFactory.decodeStream(stream, null, decodeOptions)
             } ?: return@withContext null
 
-            // 4. Handle EXIF orientation
-            val orientation = getExifOrientation(context, uri, uriString)
-            if (orientation != 0) {
-                val matrix = Matrix().apply { postRotate(orientation.toFloat()) }
-                Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+            // 4. Handle EXIF orientation (rotation and mirrored variants)
+            val transform = getExifTransform(context, uri, uriString)
+            if (transform.rotation != 0f || transform.flipHorizontal) {
+                val matrix = Matrix().apply {
+                    if (transform.flipHorizontal) postScale(-1f, 1f)
+                    if (transform.rotation != 0f) postRotate(transform.rotation)
+                }
+                val oriented = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+                if (oriented !== decoded) decoded.recycle()
+                oriented
             } else {
                 decoded
             }
@@ -90,16 +95,27 @@ object AndroidImageEditor {
         source.getPixels(srcPixels, 0, width, 0, 0, width, height)
 
         val edited = ImageEditEngine.applyEdits(srcPixels, width, height, state)
-        var result = Bitmap.createBitmap(edited.pixels, edited.width, edited.height, Bitmap.Config.ARGB_8888)
+        val result = Bitmap.createBitmap(edited.pixels, edited.width, edited.height, Bitmap.Config.ARGB_8888)
 
         if (state.straightenAngle != 0f) {
-            val matrix = Matrix().apply {
-                postRotate(state.straightenAngle)
-            }
-            result = Bitmap.createBitmap(result, 0, 0, result.width, result.height, matrix, true)
+            val matrix = Matrix().apply { postRotate(state.straightenAngle) }
+            val straightened = Bitmap.createBitmap(result, 0, 0, result.width, result.height, matrix, true)
+            if (straightened !== result) result.recycle()
+            return straightened
         }
 
         return result
+    }
+
+    private fun compressFor(bitmap: Bitmap, mimeType: String, quality: Int): Pair<Bitmap.CompressFormat, Int> {
+        val format = when {
+            mimeType.contains("png", ignoreCase = true) -> Bitmap.CompressFormat.PNG
+            mimeType.contains("webp", ignoreCase = true) ->
+                if (Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSLESS
+                else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+            else -> Bitmap.CompressFormat.JPEG
+        }
+        return format to if (format == Bitmap.CompressFormat.JPEG) quality else 100
     }
 
     /**
@@ -200,21 +216,23 @@ object AndroidImageEditor {
                 if (!backupFile.exists()) {
                     file.copyTo(backupFile, overwrite = false)
                 }
+                val (format, effectiveQuality) = compressFor(edited, originalItem.mimeType, quality)
                 FileOutputStream(file).use { out ->
-                    edited.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                    edited.compress(format, effectiveQuality, out)
                 }
                 MediaScannerConnection.scanFile(
                     context,
                     arrayOf(file.absolutePath),
-                    arrayOf("image/jpeg"),
+                    arrayOf(originalItem.mimeType),
                     null
                 )
                 true
             } else {
                 // Try writing via ContentResolver
                 val uri = Uri.parse(originalItem.uri)
+                val (format, effectiveQuality) = compressFor(edited, originalItem.mimeType, quality)
                 context.contentResolver.openOutputStream(uri, "rwt")?.use { out ->
-                    edited.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                    edited.compress(format, effectiveQuality, out)
                     true
                 } ?: false
             }
@@ -242,22 +260,28 @@ object AndroidImageEditor {
         }
     }
 
-    private fun getExifOrientation(context: Context, uri: Uri, path: String): Int {
+    private data class ExifTransform(val rotation: Float, val flipHorizontal: Boolean)
+
+    private fun getExifTransform(context: Context, uri: Uri, path: String): ExifTransform {
         return try {
             val exif = if (uri.scheme == "content") {
                 openInputStream(context, uri, path)?.use { ExifInterface(it) }
             } else {
                 ExifInterface(path)
-            } ?: return 0
+            } ?: return ExifTransform(0f, false)
 
             when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
-                ExifInterface.ORIENTATION_ROTATE_90 -> 90
-                ExifInterface.ORIENTATION_ROTATE_180 -> 180
-                ExifInterface.ORIENTATION_ROTATE_270 -> 270
-                else -> 0
+                ExifInterface.ORIENTATION_ROTATE_90 -> ExifTransform(90f, false)
+                ExifInterface.ORIENTATION_ROTATE_180 -> ExifTransform(180f, false)
+                ExifInterface.ORIENTATION_ROTATE_270 -> ExifTransform(270f, false)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> ExifTransform(0f, true)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> ExifTransform(180f, true)
+                ExifInterface.ORIENTATION_TRANSPOSE -> ExifTransform(90f, true)
+                ExifInterface.ORIENTATION_TRANSVERSE -> ExifTransform(270f, true)
+                else -> ExifTransform(0f, false)
             }
         } catch (_: Exception) {
-            0
+            ExifTransform(0f, false)
         }
     }
 }

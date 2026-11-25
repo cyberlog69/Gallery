@@ -73,16 +73,16 @@ data class MediaItem(
     val tags: List<String> = emptyList(),
     val perceptualHash: ULong = 0UL,
     val isVaulted: Boolean = false,
-    val embeddingVector: FloatArray? = null,
     val quantizedEmbedding: ByteArray? = null,
     val faceIds: List<String> = emptyList(),
     val detectedFaceCount: Int = 0,
-    val ocrText: String? = null
+    /** Number of text-like layout bands detected. This is not transcribed text. */
+    val textRegionCount: Int = 0
 ) {
     val isVideo: Boolean get() = mediaType == MediaType.VIDEO
     val isImage: Boolean get() = mediaType == MediaType.IMAGE
     val hasEdits: Boolean get() = editState.isEdited
-    val hasOcrText: Boolean get() = !ocrText.isNullOrBlank()
+    val hasTextRegions: Boolean get() = textRegionCount > 0
     val hasFaces: Boolean get() = detectedFaceCount > 0 || faceIds.isNotEmpty()
 
     override fun equals(other: Any?): Boolean {
@@ -90,19 +90,40 @@ data class MediaItem(
         if (other !is MediaItem) return false
         return id == other.id &&
                path == other.path &&
+               uri == other.uri &&
+               displayName == other.displayName &&
                sizeBytes == other.sizeBytes &&
                dateModifiedSec == other.dateModifiedSec &&
+               dateTakenSec == other.dateTakenSec &&
+               mediaType == other.mediaType &&
+               albumName == other.albumName &&
+               aiCategory == other.aiCategory &&
+               aiConfidence == other.aiConfidence &&
                isFavorite == other.isFavorite &&
                editState == other.editState &&
+               tags == other.tags &&
                perceptualHash == other.perceptualHash &&
-               isVaulted == other.isVaulted
+               isVaulted == other.isVaulted &&
+               textRegionCount == other.textRegionCount &&
+               detectedFaceCount == other.detectedFaceCount &&
+               faceIds == other.faceIds &&
+               (quantizedEmbedding?.contentEquals(other.quantizedEmbedding)
+                   ?: (other.quantizedEmbedding == null))
     }
 
     override fun hashCode(): Int {
         var result = id.hashCode()
         result = 31 * result + path.hashCode()
+        result = 31 * result + displayName.hashCode()
+        result = 31 * result + dateModifiedSec.hashCode()
         result = 31 * result + isFavorite.hashCode()
         result = 31 * result + editState.hashCode()
+        result = 31 * result + aiCategory.hashCode()
+        result = 31 * result + tags.hashCode()
+        result = 31 * result + perceptualHash.hashCode()
+        result = 31 * result + textRegionCount
+        result = 31 * result + detectedFaceCount
+        result = 31 * result + (quantizedEmbedding?.contentHashCode() ?: 0)
         return result
     }
 

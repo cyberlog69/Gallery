@@ -1,92 +1,88 @@
 # Offline Media Gallery for Android
 
-An ultra-lightweight, RAM-optimized, completely offline media gallery application for Android supporting all existing picture and video formats, powered by an on-device offline AI classification engine.
+A lightweight media gallery for Android built with Kotlin and Jetpack Compose. It
+browses the device library through `MediaStore`, plays video with Media3, edits
+photos non-destructively, and runs a small **heuristic** on-device analysis pass
+for categories, search and duplicate detection.
 
-- **Material 3 Design**: Built with Kotlin and Jetpack Compose featuring dynamic theming, fluid pinch-to-zoom timeline grid, sticky date headers, and full-screen viewer with ExoPlayer video playback.
-- **Dedicated Albums & Folder Browser**: Instant local directory grouping and album navigation directly mapped to device storage.
-- **Non-Destructive Photo Editor**: Real-time interactive adjustments for crop, aspect ratio presets (1:1, 4:5, 16:9, 3:2), arbitrary angle rotation (-45° to +45°), exposure, contrast, highlights, shadows, saturation, temperature, and tint.
-- **Offline AI Smart Categories**: Automatic on-device classification into 8 categories (Nature, People, Food, Pets, Documents, City, Vehicles, Screenshots) running entirely on local silicon.
+No model binary is bundled. Nothing about your photos leaves the device, with one
+exception that you can ignore entirely: the in-app updater contacts GitHub to check
+for new releases, and that is the only reason the app declares `INTERNET`.
 
----
+## What it actually does
 
-## Key Highlights
+- **Timeline, albums, viewer**: date-grouped grid, folder albums, pinch-to-zoom
+  columns, full-screen viewer with ExoPlayer, share, and favourite.
+- **Non-destructive editor**: crop with aspect presets, straighten, and
+  exposure/contrast/saturation/temperature/tint. Edits are stored as JSON, and
+  exporting can save a copy or overwrite in place with a `.bak` backup.
+- **Offline category pass**: a decision tree over colour and edge statistics tags
+  photos as Nature, People, Food, Documents, City, Screenshots, or Uncategorized.
+  This is a heuristic, not a neural network; accuracy is best-effort.
+- **Keyword search**: file name, album, tags and category names, lightly re-ranked
+  by a 256-D hand-crafted colour/structure descriptor. It is not CLIP and does not
+  understand arbitrary concepts.
+- **Face candidates**: skin-chroma blob detection, grouped by appearance similarity
+  into "People" clusters. This is not identity recognition and it does not learn
+  who someone is.
+- **Document layout**: detects text-like bands and light page backgrounds so
+  receipts/scans land in Documents. It does **not** transcribe text; there is no
+  OCR engine in this project.
+- **Duplicate groups**: 64-bit dHash comparison.
+- **Persistence**: favourites, tags, edit state, person names and cached analysis
+  survive restarts via an atomic file-backed store in `filesDir`.
 
-### 1. 100% Offline & Privacy-First
-- **Zero Internet Permissions**: `android.permission.INTERNET` is not requested anywhere in the codebase.
-- **On-Device AI Classification**: Uses an on-device feature classification engine operating purely on local pixel buffers (no cloud APIs, no external telemetry).
+## Privacy and permissions
 
-### 2. Extreme RAM & Performance Optimization (Google Play Standards)
-- **Never Decodes Full-Resolution Bitmaps into RAM for Previews**: A 48MP camera photo requires nearly 200MB of RAM uncompressed. Our `ThumbnailEngine` computes exact power-of-two `inSampleSize` downsampling before decoding, keeping thumbnail memory at ~256KB per item (over **700× lower RAM**).
-- **Two-Tier Cache System**:
-  - **In-Memory LRU Cache**: Strict byte ceiling with automatic eviction of least-recently-used bitmaps to guarantee the app never exhausts RAM.
-  - **Coil Image Pipeline**: Memory-mapped disk cache and proactive memory trimming (`onTrimMemory` hooks) to prevent LMKD terminations.
-- **Strict Viewport-Bounded Decoding**: Decodes only up to device screen dimensions, recycling intermediate bitmaps during live editor gesture adjustments.
+| Permission | Why |
+| --- | --- |
+| `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` | Read the photo/video library (Android 13+). |
+| `READ_MEDIA_VISUAL_USER_SELECTED` | Android 14+ partial "Select photos" access. |
+| `READ_EXTERNAL_STORAGE` (≤ API 32) | Legacy library read. |
+| `WRITE_EXTERNAL_STORAGE` (≤ API 28) | Legacy delete support. |
+| `INTERNET` | Update checks against the GitHub releases API only. |
+| `POST_NOTIFICATIONS` | Optional update-ready notification. |
+| `REQUEST_INSTALL_PACKAGES` | Install a downloaded update APK. |
 
-### 3. Comprehensive Format Support
-- **Images**: JPEG (`.jpg`, `.jpeg`), PNG (`.png`), WebP (`.webp`), GIF (`.gif`), BMP (`.bmp`), HEIF/HEIC (`.heic`, `.heif`), AVIF (`.avif`), TIFF (`.tif`, `.tiff`), SVG (`.svg`), and Camera RAW formats (`.dng`, `.cr2`, `.nef`, `.arw`).
-- **Videos**: MP4 (`.mp4`), MKV (`.mkv`), WebM (`.webm`), AVI (`.avi`), MOV (`.mov`), 3GP (`.3gp`), WMV (`.wmv`), FLV (`.flv`), TS (`.ts`), M4V (`.m4v`).
+There is no analytics, no crash reporting and no upload of media or metadata.
 
-### 4. On-Device AI Classification Categories
-The offline AI classifier automatically scans and tags images into 8 intuitive categories:
-- 🌿 **Nature & Landscapes** (foliage, greenery, sky, mountains)
-- 👤 **People & Portraits** (faces, portraits, skin tone chromaticity)
-- 🍕 **Food & Dining** (meals, warm tones, dining scenes)
-- 🐾 **Pets & Animals** (animals, wildlife)
-- 📄 **Documents & Text** (scans, receipts, contracts, high horizontal edge density)
-- 🏙️ **City & Architecture** (buildings, streets, structural edges)
-- 🚗 **Vehicles & Travel** (cars, bikes, transport)
-- 📱 **Screenshots** (device UI captures)
-
----
-
-## Project Structure
+## Project layout
 
 ```
-Gallery/
-├── core/                               // Core Business Logic & Models
-│   ├── src/commonMain/kotlin/com/gallery/core/
-│   │   ├── model/                      // MediaItem, MediaType, AiCategory, ExifData, Album, EditModels
-│   │   ├── cache/                      // ThumbnailEngine, MemoryLruCache
-│   │   ├── ai/                         // OfflineAiClassifier, PerceptualHasher
-│   │   ├── edit/                       // ImageEditEngine (non-destructive pixel adjustments)
-│   │   ├── updater/                    // UpdateChecker, UpdateInfo
-│   │   └── util/                       // MediaFormatDetector, ExifExtractor
-│   └── src/androidMain/kotlin/com/gallery/core/
-│       ├── scanner/                    // MediaStoreScanner (ContentResolver reactive Flow)
-│       └── edit/                       // AndroidImageEditor (Bitmap decoders & exporter)
-│
-└── androidApp/                         // Android App (Jetpack Compose Material 3)
-    └── src/main/
-        ├── AndroidManifest.xml         // Offline permissions (Zero internet permission)
-        └── java/com/gallery/android/
-            ├── MainActivity.kt         // NavigationBar & permission handling
-            ├── GalleryApplication.kt   // Coil image loader configuration & onTrimMemory
-            ├── ui/
-            │   ├── screens/
-            │   │   ├── TimelineScreen.kt      // Date-grouped grid with pinch-to-zoom columns
-            │   │   ├── AlbumsScreen.kt        // Albums & folder navigation
-            │   │   ├── PhotoEditorScreen.kt   // Non-destructive photo editor
-            │   │   ├── AiCategoriesScreen.kt  // Smart categories grid
-            │   │   └── MediaViewerScreen.kt   // Fullscreen viewer with ExoPlayer video
-            │   ├── components/                // MediaGridItem, Dialogs
-            │   ├── theme/                     // Material 3 dynamic color scheme
-            │   └── viewmodel/                 // GalleryViewModel
-            └── updater/                       // AndroidAppUpdater
+core/
+  commonMain/  models, heuristic analysis (OfflineVisionEngine,
+               FaceDetectionEngine, DocumentLayoutAnalyzer, PerceptualHasher),
+               edit engine, search, metadata store + codec, updater parsing
+  androidMain/ MediaStore scanner, bitmap decode/edit, atomic file persistence,
+               MediaAnalyzer (256 px descriptor pass, 640 px document pass)
+androidApp/
+  MainActivity, GalleryViewModel, Compose screens, Coil/Media3, AndroidAppUpdater
 ```
 
----
+## Build and test
 
-## How to Run & Build
-
-### Building the Android APK
-Double-click `build-android.bat` or run:
 ```cmd
-.\gradlew.bat :androidApp:assembleDebug
+set JAVA_HOME=C:\path\to\jdk-17-or-21
+gradlew.bat :core:testDebugUnitTest
+gradlew.bat :androidApp:assembleDebug
 ```
-The APK is generated at:
-`androidApp\build\outputs\apk\debug\androidApp-debug.apk`
 
-### Running Automated Unit Tests
-```cmd
-.\gradlew.bat :core:testDebugUnitTest
-```
+Release builds use `keystore.properties` (or `GALLERY_KEYSTORE_FILE`,
+`GALLERY_KEYSTORE_PASSWORD`, `GALLERY_KEY_ALIAS`, `GALLERY_KEY_PASSWORD`) when
+present. Without them the release variant is left unsigned rather than being
+signed with the debug key. R8 shrinking is enabled for release.
+
+## Known limitations
+
+- The category pass is colour/edge heuristics; it confuses scenes with similar
+  palettes. Night shots, snow and low-contrast photos are weak.
+- Face detection misses profile faces, small faces and dark skin under poor light.
+  The People shelf only shows groups that appear in at least 3 photos, with low
+  confidence candidates filtered out, but it still groups by appearance rather than
+  identity. Treat it as a convenience shelf, not face recognition.
+- Document and receipt detection finds layout, not words. Text search over
+  document contents is not available.
+- Search requires a textual signal (name, album, tag, category) to return results;
+  the descriptor alone only re-ranks.
+- The updater trusts the GitHub release JSON and verifies the APK's SHA-256 only
+  when the release asset includes a `digest` field.

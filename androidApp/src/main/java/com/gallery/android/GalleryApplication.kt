@@ -29,8 +29,9 @@ class GalleryApplication : Application(), ImageLoaderFactory {
             }
             .memoryCache {
                 MemoryCache.Builder(this)
-                    // Allocate at most 25% of available app RAM to cache
-                    .maxSizePercent(0.25)
+                    // Keep the bitmap cache modest: decoded thumbnails are cheap
+                    // on small screens and a huge cache just invites LMKD kills.
+                    .maxSizePercent(0.15)
                     .build()
             }
             .diskCache {

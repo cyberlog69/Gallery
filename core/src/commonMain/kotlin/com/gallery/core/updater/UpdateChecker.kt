@@ -174,6 +174,7 @@ object UpdateChecker {
                         val sizeMatch = "\"size\"\\s*:\\s*(\\d+)".toRegex().find(obj)
                         val size = sizeMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
                         val contentType = extractJsonString(obj, "content_type") ?: ""
+                        val digest = extractJsonString(obj, "digest") ?: ""
 
                         if (name != null && url != null) {
                             assetsList.add(
@@ -181,7 +182,8 @@ object UpdateChecker {
                                     name = name,
                                     downloadUrl = url,
                                     sizeBytes = size,
-                                    contentType = contentType
+                                    contentType = contentType,
+                                    digest = digest
                                 )
                             )
                         }

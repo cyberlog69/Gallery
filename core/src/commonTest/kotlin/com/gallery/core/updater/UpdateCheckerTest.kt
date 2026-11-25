@@ -98,4 +98,56 @@ class UpdateCheckerTest {
         assertEquals("https://github.com/cyberlog69/Gallery/releases/download/v1.3.0/Gallery-v1.3.0.apk", info.apkAsset?.downloadUrl)
         assertEquals(14646485L, info.apkAsset?.sizeBytes)
     }
+
+    @Test
+    fun testParseReleaseAssetDigest() {
+        val json = """
+        {
+          "tag_name": "v1.4.0",
+          "name": "v1.4.0",
+          "html_url": "https://github.com/cyberlog69/Gallery/releases/tag/v1.4.0",
+          "body": "release",
+          "assets": [
+            {
+              "name": "Gallery-v1.4.0.apk",
+              "browser_download_url": "https://example.com/Gallery-v1.4.0.apk",
+              "size": 100,
+              "content_type": "application/vnd.android.package-archive",
+              "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val asset = UpdateChecker.parseReleaseJson(json).apkAsset
+        assertNotNull(asset)
+        assertEquals(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            asset!!.expectedSha256
+        )
+    }
+
+    @Test
+    fun testParseReleaseAssetWithoutDigestHasNullSha256() {
+        val json = """
+        {
+          "tag_name": "v1.4.0",
+          "name": "v1.4.0",
+          "html_url": "https://example.com",
+          "body": "release",
+          "assets": [
+            {
+              "name": "Gallery-v1.4.0.apk",
+              "browser_download_url": "https://example.com/Gallery-v1.4.0.apk",
+              "size": 100,
+              "content_type": "application/vnd.android.package-archive"
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val asset = UpdateChecker.parseReleaseJson(json).apkAsset
+        assertNotNull(asset)
+        assertEquals(null, asset!!.expectedSha256)
+    }
 }

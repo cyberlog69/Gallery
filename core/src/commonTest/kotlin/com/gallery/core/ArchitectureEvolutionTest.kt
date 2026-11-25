@@ -131,7 +131,7 @@ class ArchitectureEvolutionTest {
         val embB = com.gallery.core.ai.OfflineAiClassifier.generateEmbedding(pixelsB, 32, 32)
         val embC = com.gallery.core.ai.OfflineAiClassifier.generateEmbedding(pixelsC, 32, 32)
 
-        assertEquals(16, embA.size)
+        assertEquals(com.gallery.core.ai.OfflineVisionEngine.EMBEDDING_DIM, embA.size)
         // Cosine similarity of identical images should be ~1.0
         val simAB = com.gallery.core.ai.OfflineAiClassifier.computeSimilarity(embA, embB)
         assertEquals(1.0f, simAB, 0.05f)

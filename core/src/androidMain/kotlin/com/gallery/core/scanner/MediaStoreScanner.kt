@@ -3,7 +3,6 @@ package com.gallery.core.scanner
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
-import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -14,24 +13,45 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 
+/**
+ * Read-only MediaStore scanner.
+ *
+ * Emits one merged, newest-first stream of images and videos. Trashed rows are
+ * already excluded by MediaStore on Android 11+, so this is "what the user can see".
+ */
 object MediaStoreScanner {
 
     fun scanAllMedia(context: Context): Flow<MediaItem> = flow {
         val resolver = context.contentResolver
-        scanImages(resolver) { emit(it) }
-        scanVideos(resolver) { emit(it) }
+        val items = ArrayList<MediaItem>(512)
+        items += queryImages(resolver)
+        items += queryVideos(resolver)
+        items.sortWith(
+            compareByDescending<MediaItem> { displayTimestamp(it) }
+                .thenByDescending { it.sizeBytes }
+        )
+        for (item in items) emit(item)
     }.flowOn(Dispatchers.IO)
 
-    private suspend fun scanImages(
-        resolver: ContentResolver,
-        onItem: suspend (MediaItem) -> Unit
-    ) {
-        val collection: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    private fun displayTimestamp(item: MediaItem): Long =
+        if (item.dateTakenSec > 0L) item.dateTakenSec else item.dateModifiedSec
+
+    private fun imageCollection(): Uri =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         } else {
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         }
 
+    private fun videoCollection(): Uri =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+
+    private fun queryImages(resolver: ContentResolver): List<MediaItem> {
+        val collection = imageCollection()
         val projection = arrayOf(
             MediaStore.Images.Media._ID,
             MediaStore.Images.Media.DISPLAY_NAME,
@@ -44,8 +64,8 @@ object MediaStoreScanner {
             MediaStore.Images.Media.DATA,
             MediaStore.Images.Media.BUCKET_DISPLAY_NAME
         )
-
         val sortOrder = "${MediaStore.Images.Media.DATE_MODIFIED} DESC"
+        val out = ArrayList<MediaItem>(256)
 
         resolver.query(collection, projection, null, null, sortOrder)?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
@@ -63,48 +83,39 @@ object MediaStoreScanner {
                 val id = cursor.getLong(idCol)
                 val contentUri = ContentUris.withAppendedId(collection, id)
                 val name = cursor.getString(nameCol) ?: "Image_$id"
-                val size = cursor.getLong(sizeCol)
+                val path = if (dataCol >= 0 && !cursor.isNull(dataCol)) {
+                    cursor.getString(dataCol)
+                } else {
+                    contentUri.toString()
+                }
                 val dateModified = cursor.getLong(modCol)
                 val dateTaken = if (takenCol >= 0 && !cursor.isNull(takenCol)) {
-                    cursor.getLong(takenCol) / 1000
-                } else dateModified
-                val mime = cursor.getString(mimeCol) ?: "image/jpeg"
-                val width = if (widthCol >= 0 && !cursor.isNull(widthCol)) cursor.getInt(widthCol) else 0
-                val height = if (heightCol >= 0 && !cursor.isNull(heightCol)) cursor.getInt(heightCol) else 0
-                val path = if (dataCol >= 0 && !cursor.isNull(dataCol)) cursor.getString(dataCol) else contentUri.toString()
-                val rawBucket = if (bucketCol >= 0 && !cursor.isNull(bucketCol)) cursor.getString(bucketCol) else null
-                val album = rawBucket?.takeIf { it.isNotBlank() }
-                    ?: (if (path.contains("/")) path.substringBeforeLast('/').substringAfterLast('/') else "Pictures")
+                    (cursor.getLong(takenCol) / 1000L).takeIf { it > 0L } ?: dateModified
+                } else {
+                    dateModified
+                }
 
-                val item = MediaItem(
+                out += MediaItem(
                     id = id.toString(),
                     path = path,
                     uri = contentUri.toString(),
                     displayName = name,
-                    sizeBytes = size,
+                    sizeBytes = cursor.getLong(sizeCol),
                     dateModifiedSec = dateModified,
                     dateTakenSec = dateTaken,
-                    mimeType = mime,
+                    mimeType = cursor.getString(mimeCol) ?: "image/jpeg",
                     mediaType = MediaType.IMAGE,
-                    width = width,
-                    height = height,
-                    albumName = album
+                    width = if (widthCol >= 0 && !cursor.isNull(widthCol)) cursor.getInt(widthCol) else 0,
+                    height = if (heightCol >= 0 && !cursor.isNull(heightCol)) cursor.getInt(heightCol) else 0,
+                    albumName = resolveAlbum(cursor, bucketCol, path, "Pictures")
                 )
-                onItem(item)
             }
         }
+        return out
     }
 
-    private suspend fun scanVideos(
-        resolver: ContentResolver,
-        onItem: suspend (MediaItem) -> Unit
-    ) {
-        val collection: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        }
-
+    private fun queryVideos(resolver: ContentResolver): List<MediaItem> {
+        val collection = videoCollection()
         val projection = arrayOf(
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.DISPLAY_NAME,
@@ -118,8 +129,8 @@ object MediaStoreScanner {
             MediaStore.Video.Media.DATA,
             MediaStore.Video.Media.BUCKET_DISPLAY_NAME
         )
-
         val sortOrder = "${MediaStore.Video.Media.DATE_MODIFIED} DESC"
+        val out = ArrayList<MediaItem>(64)
 
         resolver.query(collection, projection, null, null, sortOrder)?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
@@ -138,37 +149,47 @@ object MediaStoreScanner {
                 val id = cursor.getLong(idCol)
                 val contentUri = ContentUris.withAppendedId(collection, id)
                 val name = cursor.getString(nameCol) ?: "Video_$id"
-                val size = cursor.getLong(sizeCol)
+                val path = if (dataCol >= 0 && !cursor.isNull(dataCol)) {
+                    cursor.getString(dataCol)
+                } else {
+                    contentUri.toString()
+                }
                 val dateModified = cursor.getLong(modCol)
                 val dateTaken = if (takenCol >= 0 && !cursor.isNull(takenCol)) {
-                    cursor.getLong(takenCol) / 1000
-                } else dateModified
-                val mime = cursor.getString(mimeCol) ?: "video/mp4"
-                val width = if (widthCol >= 0 && !cursor.isNull(widthCol)) cursor.getInt(widthCol) else 0
-                val height = if (heightCol >= 0 && !cursor.isNull(heightCol)) cursor.getInt(heightCol) else 0
-                val duration = if (durCol >= 0 && !cursor.isNull(durCol)) cursor.getLong(durCol) else 0L
-                val path = if (dataCol >= 0 && !cursor.isNull(dataCol)) cursor.getString(dataCol) else contentUri.toString()
-                val rawBucket = if (bucketCol >= 0 && !cursor.isNull(bucketCol)) cursor.getString(bucketCol) else null
-                val album = rawBucket?.takeIf { it.isNotBlank() }
-                    ?: (if (path.contains("/")) path.substringBeforeLast('/').substringAfterLast('/') else "Videos")
+                    (cursor.getLong(takenCol) / 1000L).takeIf { it > 0L } ?: dateModified
+                } else {
+                    dateModified
+                }
 
-                val item = MediaItem(
+                out += MediaItem(
                     id = id.toString(),
                     path = path,
                     uri = contentUri.toString(),
                     displayName = name,
-                    sizeBytes = size,
+                    sizeBytes = cursor.getLong(sizeCol),
                     dateModifiedSec = dateModified,
                     dateTakenSec = dateTaken,
-                    mimeType = mime,
+                    mimeType = cursor.getString(mimeCol) ?: "video/mp4",
                     mediaType = MediaType.VIDEO,
-                    width = width,
-                    height = height,
-                    durationMs = duration,
-                    albumName = album
+                    width = if (widthCol >= 0 && !cursor.isNull(widthCol)) cursor.getInt(widthCol) else 0,
+                    height = if (heightCol >= 0 && !cursor.isNull(heightCol)) cursor.getInt(heightCol) else 0,
+                    durationMs = if (durCol >= 0 && !cursor.isNull(durCol)) cursor.getLong(durCol) else 0L,
+                    albumName = resolveAlbum(cursor, bucketCol, path, "Videos")
                 )
-                onItem(item)
             }
         }
+        return out
+    }
+
+    private fun resolveAlbum(
+        cursor: android.database.Cursor,
+        bucketCol: Int,
+        path: String,
+        fallback: String
+    ): String {
+        val bucket = if (bucketCol >= 0 && !cursor.isNull(bucketCol)) cursor.getString(bucketCol) else null
+        if (!bucket.isNullOrBlank()) return bucket
+        val parent = path.substringBeforeLast('/', "").substringAfterLast('/')
+        return parent.ifBlank { fallback }
     }
 }

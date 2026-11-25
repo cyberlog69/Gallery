@@ -87,7 +87,7 @@ fun AiCategoriesScreen(
         )
 
         Text(
-            text = "100% on-device neural embeddings, face clustering & zero-cloud privacy.",
+            text = "Offline colour & edge analysis, appearance-based face groups, zero cloud.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 12.dp)
@@ -125,7 +125,7 @@ fun AiCategoriesScreen(
 
                         if (peopleClusters.isNotEmpty()) {
                             Text(
-                                text = "${peopleClusters.size} recognized",
+                                text = "${peopleClusters.size} appearance groups",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )

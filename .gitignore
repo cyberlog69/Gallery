@@ -13,6 +13,9 @@ build/
 
 # Local configuration
 local.properties
+keystore.properties
+*.jks
+*.keystore
 
 # OS generated
 .DS_Store

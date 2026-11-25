@@ -56,7 +56,8 @@ object AndroidAppUpdater {
     fun downloadApk(
         context: Context,
         downloadUrl: String,
-        versionName: String
+        versionName: String,
+        expectedSha256: String? = null
     ): Flow<DownloadProgress> = flow {
         val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
         val targetFile = File(updatesDir, "Gallery-v$versionName.apk")
@@ -138,6 +139,17 @@ object AndroidAppUpdater {
             }
 
             if (targetFile.exists()) targetFile.delete()
+
+            if (!expectedSha256.isNullOrBlank()) {
+                val actual = sha256Of(tempFile)
+                if (!actual.equals(expectedSha256, ignoreCase = true)) {
+                    tempFile.delete()
+                    throw java.io.IOException(
+                        "Downloaded file failed integrity check (expected ${expectedSha256.take(12)}…, got ${actual.take(12)}…)"
+                    )
+                }
+            }
+
             tempFile.renameTo(targetFile)
 
             emit(
@@ -162,8 +174,7 @@ object AndroidAppUpdater {
     /**
      * Triggers package installer with FileProvider URI.
      */
-    fun installApk(context: Context, apkFile: File) {
-        if (!apkFile.exists()) return
+    fun installApk(context: Context, apkFile: File) {        if (!apkFile.exists()) return
 
         val apkUri: Uri = FileProvider.getUriForFile(
             context,
@@ -177,6 +188,22 @@ object AndroidAppUpdater {
         }
 
         context.startActivity(intent)
+    }
+
+    /**
+     * Streams the file through SHA-256 so a 100MB APK never lands on the heap.
+     */
+    private fun sha256Of(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /**

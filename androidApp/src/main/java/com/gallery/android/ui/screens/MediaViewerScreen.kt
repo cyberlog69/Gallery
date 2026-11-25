@@ -201,13 +201,14 @@ fun MediaViewerScreen(
                         )
                     }
 
-                    // OCR / Document Text Inspector button (only for photos)
+                    // Document layout inspector (only for photos). This reports the
+                    // *presence and structure* of text-like bands, not transcribed text.
                     if (currentItem != null && !currentItem.isVideo) {
                         IconButton(onClick = { showOcrSheet = true }) {
                             Icon(
                                 imageVector = Icons.Default.Description,
-                                contentDescription = "OCR & Document Text",
-                                tint = if (currentItem.hasOcrText) Color(0xFF389BF2) else Color.White
+                                contentDescription = "Document Layout",
+                                tint = if (currentItem.hasTextRegions) Color(0xFF389BF2) else Color.White
                             )
                         }
                     }
@@ -350,13 +351,13 @@ fun MediaViewerScreen(
                     }
 
                     if (currentItem.quantizedEmbedding != null) {
-                        DetailRow("Neural Vector", "256-D INT8 Quantized")
+                        DetailRow("Visual Descriptor", "256-D colour/structure (INT8)")
                     }
                     if (currentItem.detectedFaceCount > 0) {
-                        DetailRow("Faces Detected", "${currentItem.detectedFaceCount}")
+                        DetailRow("Face Candidates", "${currentItem.detectedFaceCount}")
                     }
-                    if (currentItem.hasOcrText) {
-                        DetailRow("OCR Indexed", "Yes (${currentItem.ocrText?.length ?: 0} chars)")
+                    if (currentItem.hasTextRegions) {
+                        DetailRow("Text Regions", "${currentItem.textRegionCount} detected")
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -364,13 +365,13 @@ fun MediaViewerScreen(
             }
         }
 
-        // Offline OCR & Document Text Bottom Sheet
+        // Document Layout Bottom Sheet. Shows detected text-band structure only;
+        // this build ships no OCR model, so there is no transcribed text to show.
         if (showOcrSheet && currentItem != null) {
             ModalBottomSheet(
                 onDismissRequest = { showOcrSheet = false },
                 sheetState = rememberModalBottomSheetState()
             ) {
-                val clipboardManager = LocalClipboardManager.current
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -383,34 +384,21 @@ fun MediaViewerScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Document & Text (Offline OCR)",
+                                text = "Document Layout",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Extracted 100% on-device with zero network usage",
+                                text = "Detected on-device. This build does not transcribe text.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-
-                        if (currentItem.hasOcrText) {
-                            IconButton(onClick = {
-                                clipboardManager.setText(AnnotatedString(currentItem.ocrText ?: ""))
-                                Toast.makeText(context, "Text copied to clipboard", Toast.LENGTH_SHORT).show()
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy text",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    if (currentItem.hasOcrText) {
+                    if (currentItem.hasTextRegions) {
                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
@@ -418,29 +406,19 @@ fun MediaViewerScreen(
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = currentItem.ocrText ?: "",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(currentItem.ocrText ?: ""))
-                                Toast.makeText(context, "Text copied to clipboard", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Copy Extracted Text")
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "${currentItem.textRegionCount} text band${if (currentItem.textRegionCount == 1) "" else "s"} detected",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "This photo looks like a page of text. The app can group it under Documents and find it by name, but it cannot read the words without an OCR model.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     } else {
                         Card(
@@ -462,12 +440,12 @@ fun MediaViewerScreen(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "No Text Detected",
+                                    text = "No Text Layout Detected",
                                     fontWeight = FontWeight.SemiBold,
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
-                                    text = "Document and receipt images with legible text are automatically extracted during offline indexing.",
+                                    text = "Document and receipt photos are identified during offline indexing by their page layout and light background.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -493,7 +471,7 @@ fun MediaViewerScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "👤 ${currentItem.detectedFaceCount} face${if (currentItem.detectedFaceCount > 1) "s" else ""} recognized in this photo",
+                                text = "${currentItem.detectedFaceCount} face candidate${if (currentItem.detectedFaceCount > 1) "s" else ""} detected (grouped by appearance, not identity)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )

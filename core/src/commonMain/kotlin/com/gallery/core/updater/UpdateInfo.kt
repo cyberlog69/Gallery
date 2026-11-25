@@ -7,8 +7,16 @@ data class ReleaseAsset(
     val name: String,
     val downloadUrl: String,
     val sizeBytes: Long = 0L,
-    val contentType: String = ""
-)
+    val contentType: String = "",
+    /** GitHub asset digest, e.g. `sha256:abc123...`. Empty when the API omits it. */
+    val digest: String = ""
+) {
+    val expectedSha256: String?
+        get() = digest
+            .removePrefix("sha256:")
+            .takeIf { digest.startsWith("sha256:") && it.length == 64 }
+            ?.lowercase()
+}
 
 /**
  * Release information fetched from GitHub Releases.

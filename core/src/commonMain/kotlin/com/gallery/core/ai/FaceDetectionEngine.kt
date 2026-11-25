@@ -39,13 +39,24 @@ data class PersonCluster(
 )
 
 /**
- * On-device, offline Face Detection and DBSCAN Face Clustering Engine.
- * Detects human faces, extracts 64-dimensional facial morphology embeddings,
- * and groups recurring individuals into People Albums without cloud processing.
+ * On-device, offline face *candidate* detection and appearance clustering.
+ *
+ * Honest scope: this is chroma-based blob detection with sub-region heuristics, not
+ * a trained face detector. It finds skin-toned regions that look roughly face-shaped
+ * and groups them by colour/structure similarity, which is enough for a "People"
+ * shelf but will miss profile faces, dark skin under poor light, and small faces in
+ * group shots. The UI must present it as "grouped by appearance", never as
+ * identity recognition.
+ *
+ * Input should be at least 200px on the long edge so a face is >= 24px.
  */
 object FaceDetectionEngine {
 
     const val FACE_EMBEDDING_DIM = 64
+    const val MIN_FACE_BOX_PX = 24
+    private const val MAX_FACES_PER_IMAGE = 3
+    private const val MAX_PEOPLE_GROUPS = 60
+    private const val MIN_FACE_CONFIDENCE = 0.65f
 
     /**
      * Detects faces in an image from downscaled RGB pixels.
@@ -90,17 +101,18 @@ object FaceDetectionEngine {
         // Quick rejection: Need sufficient skin pixels (at least 3% of photo)
         if (totalSkinPixels < total * 0.03) return emptyList()
 
-        // 2. Multi-scale candidate face window scanning
-        // Typical face proportions: 20% to 65% of image height, aspect ratio ~ 0.8
+        // 2. Multi-scale candidate window scanning.
+        // Windows are fractions of the short edge so this scales with input size.
+        val shortEdge = minOf(width, height)
         val windowSizes = listOf(
-            minOf(width, height) / 2,
-            minOf(width, height) / 3,
-            minOf(width, height) / 4
-        )
+            shortEdge / 2,
+            shortEdge / 3,
+            shortEdge / 4,
+            shortEdge / 6
+        ).filter { it >= MIN_FACE_BOX_PX }.distinct()
 
         for (boxSize in windowSizes) {
-            if (boxSize < 12) continue
-            val step = maxOf(4, boxSize / 3)
+            val step = maxOf(6, boxSize / 4)
             val boxH = (boxSize * 1.2).toInt().coerceAtMost(height)
 
             for (top in 0..(height - boxH) step step) {
@@ -159,7 +171,7 @@ object FaceDetectionEngine {
                         }
 
                         if (!overlapsExisting) {
-                            val confidence = minOf(0.96f, 0.55f + skinRatio * 0.45f)
+                            val confidence = minOf(0.90f, 0.45f + skinRatio * 0.35f)
                             val embedding = extractFaceEmbedding(rgbPixels, width, height, left, top, boxSize, boxH)
 
                             detectedFaces.add(
@@ -171,6 +183,7 @@ object FaceDetectionEngine {
                                     faceEmbedding = embedding
                                 )
                             )
+                            if (detectedFaces.size >= MAX_FACES_PER_IMAGE) return detectedFaces
                         }
                     }
                 }
@@ -181,7 +194,13 @@ object FaceDetectionEngine {
     }
 
     /**
-     * Extracts a 64-dimensional facial morphology & chromatic embedding.
+     * Extracts a 64-dimensional appearance descriptor from a face box.
+     *
+     * Deliberately structure-dominant: absolute skin colour is the *least* useful
+     * signal (it collapses every face into one group), so each 4x4 cell stores
+     * luma relative to the box mean, two chroma differences, and gradient energy.
+     * This is still a hand-crafted descriptor, not a learned face embedding; it
+     * groups similar-looking faces, it does not identify people.
      */
     private fun extractFaceEmbedding(
         pixels: IntArray,
@@ -196,110 +215,174 @@ object FaceDetectionEngine {
         val cellW = maxOf(1, boxW / 4)
         val cellH = maxOf(1, boxH / 4)
 
-        // 4x4 spatial subregions of face (eyes, cheeks, nose, mouth, jaw)
-        // 16 cells * 3 channels (R, G, B) = 48 dimensions
+        val cellLuma = FloatArray(16)
+        val cellChromaRg = FloatArray(16)
+        val cellChromaRb = FloatArray(16)
+        val cellEnergy = FloatArray(16)
+        val cellCount = IntArray(16)
+
         for (cy in 0 until 4) {
             for (cx in 0 until 4) {
                 val cIdx = cy * 4 + cx
-                var sumR = 0f
-                var sumG = 0f
-                var sumB = 0f
-                var count = 0
-
                 val startY = y0 + cy * cellH
                 val endY = minOf(imgH, startY + cellH)
                 val startX = x0 + cx * cellW
                 val endX = minOf(imgW, startX + cellW)
 
                 for (y in startY until endY) {
+                    val row = y * imgW
                     for (x in startX until endX) {
-                        val p = pixels[y * imgW + x]
-                        sumR += ((p shr 16) and 0xFF) / 255f
-                        sumG += ((p shr 8) and 0xFF) / 255f
-                        sumB += (p and 0xFF) / 255f
-                        count++
+                        val p = pixels[row + x]
+                        val r = ((p shr 16) and 0xFF) / 255f
+                        val g = ((p shr 8) and 0xFF) / 255f
+                        val b = (p and 0xFF) / 255f
+                        val lum = 0.299f * r + 0.587f * g + 0.114f * b
+
+                        cellLuma[cIdx] += lum
+                        cellChromaRg[cIdx] += (r - g)
+                        cellChromaRb[cIdx] += (r - b)
+                        cellCount[cIdx]++
+
+                        // Horizontal + vertical gradient energy inside the cell.
+                        if (x + 1 < endX) {
+                            val q = pixels[row + x + 1]
+                            val qLum = 0.299f * ((q shr 16) and 0xFF) / 255f +
+                                    0.587f * ((q shr 8) and 0xFF) / 255f +
+                                    0.114f * (q and 0xFF) / 255f
+                            cellEnergy[cIdx] += kotlin.math.abs(lum - qLum)
+                        }
+                        if (y + 1 < endY) {
+                            val q = pixels[(y + 1) * imgW + x]
+                            val qLum = 0.299f * ((q shr 16) and 0xFF) / 255f +
+                                    0.587f * ((q shr 8) and 0xFF) / 255f +
+                                    0.114f * (q and 0xFF) / 255f
+                            cellEnergy[cIdx] += kotlin.math.abs(lum - qLum)
+                        }
                     }
                 }
-                val div = maxOf(1, count).toFloat()
-                vector[cIdx * 3] = sumR / div
-                vector[cIdx * 3 + 1] = sumG / div
-                vector[cIdx * 3 + 2] = sumB / div
             }
         }
 
-        // Remaining 16 dimensions: Symmetry, contrast ratio, and gradient energy
-        // Eye-to-eye horizontal contrast (cell 1 vs cell 2)
-        vector[48] = abs(vector[1 * 3] - vector[2 * 3])
-        // Cheek symmetry (cell 4 vs cell 7)
-        vector[49] = abs(vector[4 * 3] - vector[7 * 3])
-        // Forehead vs chin luminance (top row vs bottom row)
-        val foreheadLum = (vector[0] + vector[3] + vector[6] + vector[9]) / 4f
-        val chinLum = (vector[36] + vector[39] + vector[42] + vector[45]) / 4f
-        vector[50] = foreheadLum - chinLum
+        var boxLuma = 0f
+        var boxCount = 0
+        for (i in 0 until 16) {
+            boxLuma += cellLuma[i]
+            boxCount += cellCount[i]
+        }
+        val meanLuma = if (boxCount == 0) 0f else boxLuma / boxCount
 
-        for (i in 51 until FACE_EMBEDDING_DIM) {
-            val idx = (i * 3) % 48
-            vector[i] = vector[idx] * 0.5f
+        for (i in 0 until 16) {
+            val div = maxOf(1, cellCount[i]).toFloat()
+            vector[i * 4] = (cellLuma[i] / div) - meanLuma
+            vector[i * 4 + 1] = cellChromaRg[i] / div
+            vector[i * 4 + 2] = cellChromaRb[i] / div
+            vector[i * 4 + 3] = cellEnergy[i] / div
         }
 
-        // L2 Normalization
-        var normSq = 0f
-        for (v in vector) normSq += v * v
-        val norm = sqrt(normSq).coerceAtLeast(1e-6f)
-        for (i in vector.indices) vector[i] /= norm
-
+        normalizeInPlace(vector)
         return vector
     }
 
     /**
-     * Clusters detected faces across the library using DBSCAN / greedy distance thresholding.
-     * @param allFaces list of all faces detected across all images
-     * @param similarityThreshold cosine similarity threshold (default 0.75f)
-     * @return grouped PersonCluster list
+     * Groups detected faces by appearance similarity.
+     *
+     * Greedy nearest-centroid assignment: deterministic (input is sorted first), O(n·k)
+     * instead of O(n²), and stable across re-scans because cluster ids derive from the
+     * cover face rather than from array position.
+     *
+     * @param similarityThreshold cosine similarity required to join an existing group
      */
     fun clusterFaces(
         allFaces: List<DetectedFace>,
-        similarityThreshold: Float = 0.72f
+        similarityThreshold: Float = 0.74f,
+        minDistinctMedia: Int = 3
     ): List<PersonCluster> {
         if (allFaces.isEmpty()) return emptyList()
 
-        val clusters = mutableListOf<MutableList<DetectedFace>>()
-        val visited = BooleanArray(allFaces.size)
+        data class Group(
+            val faces: MutableList<DetectedFace>,
+            var centroid: FloatArray
+        )
 
-        for (i in allFaces.indices) {
-            if (visited[i]) continue
-            visited[i] = true
+        // Chrome-style heuristic detection produces several overlapping candidates
+        // per photo. Keep only the strongest three per item so one photo cannot
+        // dominate a cluster (and so the shelf is not flooded with junk groups).
+        val sorted = allFaces
+            .filter { it.confidence >= MIN_FACE_CONFIDENCE }
+            .groupBy { it.mediaItemId }
+            .values
+            .flatMap { faces ->
+                faces.sortedWith(
+                    compareByDescending<DetectedFace> { it.confidence }
+                        .thenBy { it.boundingBox.top }
+                        .thenBy { it.boundingBox.left }
+                ).take(MAX_FACES_PER_IMAGE)
+            }
+            .sortedWith(
+                compareBy<DetectedFace> { it.mediaItemId }
+                    .thenBy { it.boundingBox.top }
+                    .thenBy { it.boundingBox.left }
+            )
 
-            val currentCluster = mutableListOf(allFaces[i])
+        val groups = mutableListOf<Group>()
 
-            for (j in (i + 1) until allFaces.size) {
-                if (visited[j]) continue
-                val sim = computeCosineSimilarity(allFaces[i].faceEmbedding, allFaces[j].faceEmbedding)
-                if (sim >= similarityThreshold) {
-                    visited[j] = true
-                    currentCluster.add(allFaces[j])
+        for (face in sorted) {
+            var bestIndex = -1
+            var bestSimilarity = -1f
+            for (i in groups.indices) {
+                val similarity = computeCosineSimilarity(groups[i].centroid, face.faceEmbedding)
+                if (similarity > bestSimilarity) {
+                    bestSimilarity = similarity
+                    bestIndex = i
                 }
             }
-            clusters.add(currentCluster)
+
+            if (bestIndex >= 0 && bestSimilarity >= similarityThreshold) {
+                val group = groups[bestIndex]
+                group.faces += face
+                // Incremental centroid update (keeps the mean L2-normalized).
+                val count = group.faces.size.toFloat()
+                val updated = FloatArray(FACE_EMBEDDING_DIM)
+                for (d in 0 until FACE_EMBEDDING_DIM) {
+                    updated[d] = group.centroid[d] + (face.faceEmbedding[d] - group.centroid[d]) / count
+                }
+                normalizeInPlace(updated)
+                group.centroid = updated
+            } else {
+                groups += Group(
+                    faces = mutableListOf(face),
+                    centroid = face.faceEmbedding.copyOf()
+                )
+            }
         }
 
-        // Convert to PersonCluster models
-        return clusters.mapIndexed { index, faceGroup ->
-            val personId = "person_${index + 1}"
-            faceGroup.forEach { it.personId = personId }
+        return groups
+            .filter { group -> group.faces.map { it.mediaItemId }.distinct().size >= minDistinctMedia }
+            .sortedByDescending { group -> group.faces.map { f -> f.mediaItemId }.distinct().size }
+            .take(MAX_PEOPLE_GROUPS)
+            .mapIndexed { index, group ->
+                val coverFace = group.faces.maxByOrNull { it.confidence } ?: group.faces.first()
+                val distinctMedia = group.faces.map { it.mediaItemId }.distinct()
+                val personId = "person_${coverFace.mediaItemId}_${(coverFace.boundingBox.left * 100).toInt()}_${(coverFace.boundingBox.top * 100).toInt()}"
 
-            val coverFace = faceGroup.maxByOrNull { it.confidence } ?: faceGroup.first()
-            val distinctMediaItemIds = faceGroup.map { it.mediaItemId }.distinct()
+                group.faces.forEach { it.personId = personId }
 
-            PersonCluster(
-                personId = personId,
-                name = "Person ${index + 1}",
-                coverMediaItemId = coverFace.mediaItemId,
-                coverBoundingBox = coverFace.boundingBox,
-                faceCount = distinctMediaItemIds.size,
-                mediaItemIds = distinctMediaItemIds
-            )
-        }.sortedByDescending { it.faceCount }
+                PersonCluster(
+                    personId = personId,
+                    name = "Person ${index + 1}",
+                    coverMediaItemId = coverFace.mediaItemId,
+                    coverBoundingBox = coverFace.boundingBox,
+                    faceCount = distinctMedia.size,
+                    mediaItemIds = distinctMedia
+                )
+            }
+    }
+
+    private fun normalizeInPlace(vector: FloatArray) {
+        var normSq = 0f
+        for (v in vector) normSq += v * v
+        val norm = sqrt(normSq).coerceAtLeast(1e-6f)
+        for (i in vector.indices) vector[i] /= norm
     }
 
     fun computeCosineSimilarity(vecA: FloatArray, vecB: FloatArray): Float {

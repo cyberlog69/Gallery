@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -89,6 +90,9 @@ fun TimelineScreen(
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // Back should leave selection mode, not the app.
+    BackHandler(enabled = isSelectionMode) { viewModel.clearSelection() }
+
     Column(modifier = modifier.fillMaxSize()) {
         // Contextual Selection Action Bar vs Standard Header
         AnimatedVisibility(
@@ -157,15 +161,20 @@ fun TimelineScreen(
             AlertDialog(
                 onDismissRequest = { showDeleteConfirm = false },
                 title = { Text("Delete ${selectedItemIds.size} items?") },
-                text = { Text("Selected photos and videos will be removed from your gallery.") },
+                text = {
+                    Text(
+                        "Android will show a system confirmation and move them to Trash. " +
+                            "This also removes them from other apps that share your photo library."
+                    )
+                },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            viewModel.batchDeleteSelected()
+                            viewModel.requestDeleteSelected()
                             showDeleteConfirm = false
                         }
                     ) {
-                        Text("Delete", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                        Text("Continue", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
@@ -245,7 +254,7 @@ fun TimelineScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Offline Semantic Match: ${if (semanticMatchedConcepts.isNotEmpty()) semanticMatchedConcepts.take(3).joinToString(" • ") else "256-D neural vector"}",
+                        text = "Offline Match: ${if (semanticMatchedConcepts.isNotEmpty()) semanticMatchedConcepts.take(3).joinToString(" • ") else "visual descriptor"}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary
